@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "stdafx.hpp"
 
 #include <SPTLib\memutils.hpp>
 #include <SPTLib\patterns.hpp>
@@ -22,6 +22,15 @@ namespace patterns
 	PATTERNS(SV_Frame,
 	         "5135",
 	         "8B 0D ?? ?? ?? ?? 83 EC 08 85 C9 74 10 8B 44 24 0C 84 C0 74 08 8B 11 50 8B 42 78 FF D0 83 3D");
+	PATTERNS(GetScreenAspect, "5135", "83 EC 0C A1 ?? ?? ?? ?? F3");
+	PATTERNS(CVRenderView__VGui_Paint, "5135", "E8 ?? ?? ?? ?? 8B 10 8B 52 34 8B C8 FF E2 CC CC");
+	PATTERNS(
+	    CEngineTrace__PointOutsideWorld,
+	    "5135",
+	    "8B 44 24 04 50 E8 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? C1 E0 04 83 C4 04 66 83 7C 08 04 FF 0F 94 C0 C2 04 00");
+	PATTERNS(CEngineVGui__Paint,
+	         "dmomm",
+	         "6A FF 68 ?? ?? ?? ?? 64 A1 ?? ?? ?? ?? 50 64 89 25 ?? ?? ?? ?? 83 EC 1C 56 6A 04");
 
 	/****************************** CLIENT ******************************/
 
@@ -54,6 +63,19 @@ namespace patterns
 	         "55 8B EC 83 EC 20 57 8B F9 F7 87 ?? ?? ?? ?? ?? ?? ?? ?? 0F 84 ?? ?? ?? ?? 53 56 8D 9F",
 	         "2257546",
 	         "55 8B EC 83 EC 20 57 8B F9 F7 87 ?? ?? ?? ?? ?? ?? ?? ?? 0F 84 ?? ?? ?? ?? 56 8D B7");
+	PATTERNS(
+	    CViewRender__Render,
+	    "5135",
+	    "81 EC 98 00 00 00 53 56 57 6A 04 6A 00 68 ?? ?? ?? ?? 6A 00 8B F1 8B ?? ?? ?? ?? ?? 68 ?? ?? ?? ?? FF ?? ?? ?? ?? ?? 8B BC 24 A8 00 00 00 8B 4F 04",
+	    "7462488",
+	    "55 8B EC 81 EC 30 01 00 00 53");
+	PATTERNS(CViewRender__QueueOverlayRenderView,
+	         "3420",
+	         "8B 44 24 ?? 56 8B F1 50 8D 8E ?? ?? ?? ??",
+	         "7462488",
+	         "55 8B EC 56 FF 75 ?? 8B F1 8D 8E ?? ?? ?? ??");
+	PATTERNS(CDebugViewRender__Draw2DDebuggingInfo, "5135", "A1 ?? ?? ?? ?? 81 EC 9C 00 00 00");
+	PATTERNS(DecodeUserCmdFromBuffer, "dmomm", "81 EC BC 00 00 00 56 8B F1 8D 4C 24 ?? E8 ?? ?? ?? ?? 8D 44 24 ??");
 
 	/****************************** SERVER ******************************/
 
@@ -122,5 +144,15 @@ namespace patterns
 	PATTERNS(CGameMovement__DecayPunchAngle,
 	         "5135",
 	         "83 EC 0C 56 8B F1 8B 56 ?? D9 82 ?? ?? ?? ?? 8D 8A ?? ?? ?? ??");
+
+	/****************************** VPHYSICS ******************************/
+	
+	PATTERNS(CPhysicsObject__GetPosition,
+	         "5135",
+	         "8B 49 08 81 EC 80 00 00 00 8D 04 24 50 E8 ?? ?? ?? ?? 8B 84 24 84 00 00 00 85 C0",
+	         "1910503",
+	         "55 8B EC 8B 49 08 81 EC 80 00 00 00 8D 45 80 50 E8 ?? ?? ?? ?? 8B 45 08 85 C0",
+	         "7462488",
+	         "55 8B EC 8B 49 ?? 8D 45 ?? 81 EC 80 00 00 00 50 E8 ?? ?? ?? ?? 8B 45 ??");
 
 } // namespace patterns

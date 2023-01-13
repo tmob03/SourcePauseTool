@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "stdafx.hpp"
 #include <future>
 #include "convar.hpp"
 #include "feature.hpp"
@@ -180,7 +180,7 @@ void Feature::InitConcommandBase(ConCommandBase& convar)
 
 bool Feature::AddHudCallback(const char* sortKey, std::function<void()> func, ConVar& convar)
 {
-#if defined(SSDK2007)
+#ifdef SPT_HUD_ENABLED
 	bool result = spt_hud.AddHudCallback(HudCallback(
 	    sortKey, func, [&convar]() { return convar.GetBool(); }, false));
 

@@ -10,6 +10,9 @@
 #include "mathlib\vector.h"
 #endif
 
+#include <string>
+#include <map>
+
 typedef void*(__fastcall* _GetGroundEntity)(void* thisptr, int edx);
 typedef void(
     __fastcall* _CreateMove)(void* thisptr, int edx, int sequence_number, float input_sample_frametime, bool active);
@@ -50,10 +53,11 @@ public:
 	void GetPlayerFields();
 	void OnTick();
 
-	bool duckspam = false;
+	bool fetchedPlayerFields = false;
 	bool forceJump = false;
 	bool forceUnduck = false;
 	bool playerioAddressesWereFound = false;
+	int spamButtons = 0;
 	ptrdiff_t offServerAbsOrigin = 0;
 	uintptr_t pCmd = 0;
 	_CreateMove ORIG_CreateMove = nullptr;
@@ -85,17 +89,16 @@ public:
 	PlayerField<Vector> m_vecPreviouslyPredictedOrigin;
 	PlayerField<Vector> m_vecViewOffset;
 
-	void EnableDuckspam()
+	void EnableSpam(int flags)
 	{
-		duckspam = true;
+		spamButtons |= flags;
 	}
-	void DisableDuckspam()
+	void DisableSpam(int flags)
 	{
-		duckspam = false;
+		spamButtons &= ~flags;
 	}
 
 protected:
-
 	virtual void InitHooks() override;
 
 	virtual void LoadFeature() override;

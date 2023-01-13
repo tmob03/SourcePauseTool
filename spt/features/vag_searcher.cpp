@@ -1,15 +1,81 @@
-#include "stdafx.h"
-#if defined(SSDK2007) || defined(SSDK2013)
-#include "vag_searcher.hpp"
+#include "stdafx.hpp"
 
-#include "interfaces.hpp"
-#include "property_getter.hpp"
-#include "ent_utils.hpp"
-#include "..\utils\game_detection.hpp"
-#include "playerio.hpp"
-#include "signals.hpp"
-#include "..\sptlib-wrapper.hpp"
-#include "..\cvars.hpp"
+#if defined(SSDK2007) || defined(SSDK2013)
+
+#include "spt\feature.hpp"
+#include "spt\features\playerio.hpp"
+#include "spt\features\property_getter.hpp"
+#include "spt\utils\ent_utils.hpp"
+#include "spt\utils\interfaces.hpp"
+#include "spt\utils\game_detection.hpp"
+#include "spt\utils\signals.hpp"
+#include "spt\cvars.hpp"
+#include "spt\sptlib-wrapper.hpp"
+
+#include "icliententity.h"
+
+extern IClientEntity* getPortal(const char* arg, bool verbose);
+extern IClientEntity* GetLinkedPortal(IClientEntity* portal);
+
+// VAG tester
+class VagSearcher : public FeatureWrapper<VagSearcher>
+{
+public:
+	void StartSearch();
+	void VagCrashTriggered();
+	bool IsIterating()
+	{
+		return iteration != 0;
+	}
+	enum VagSearchResult
+	{
+		ITERATING,
+		SUCCESS,
+		FAIL,
+		MAX_ITERATIONS,
+		WOULD_CAUSE_CRASH
+	};
+	enum SearchResult
+	{
+		NONE,
+		NEXT_TO_ENTRY,
+		NEXT_TO_EXIT,
+		BEHIND_ENTRY_PLANE
+	};
+	void StartIterations();
+	VagSearchResult RunIteration();
+	void OnTick();
+
+protected:
+	virtual bool ShouldLoadFeature() override;
+
+	virtual void InitHooks() override;
+
+	virtual void LoadFeature() override;
+
+	virtual void UnloadFeature() override;
+
+private:
+	int cooldown_ticks = 2;
+	int cooldown;
+	int max_iteration = 35;
+	int iteration = 0;
+	bool crash;
+	IClientEntity* enter_portal = NULL;
+	IClientEntity* exit_portal = NULL;
+	int entry_index;
+	int exit_index;
+	Vector entry_origin;
+	Vector entry_norm;
+	Vector exit_origin;
+	bool is_crouched;
+	int player_half_height;
+	Vector player_setpos;
+	int no_idx;
+	SearchResult first_result = NONE;
+	SearchResult current_result;
+	std::string setpos_cmd;
+};
 
 VagSearcher spt_vag_searcher;
 
@@ -54,8 +120,8 @@ void VagSearcher::StartSearch()
 	entry_index = enter_portal->entindex();
 	exit_index = exit_portal->entindex();
 
-	if (utils::GetProperty<int>(entry_index - 1, "m_bActivated") == 0
-	    || utils::GetProperty<int>(exit_index - 1, "m_bActivated") == 0)
+	if (spt_propertyGetter.GetProperty<int>(entry_index - 1, "m_bActivated") == 0
+	    || spt_propertyGetter.GetProperty<int>(exit_index - 1, "m_bActivated") == 0)
 	{
 		Msg("Portal not activated.\n");
 		return;
@@ -105,7 +171,7 @@ void VagSearcher::StartIterations()
 	AngleVectors(angle, &entry_norm);
 
 	exit_origin = utils::GetPortalPosition(exit_portal);
-	is_crouched = (utils::GetProperty<int>(0, "m_fFlags") & 2) != 0;
+	is_crouched = (spt_propertyGetter.GetProperty<int>(0, "m_fFlags") & 2) != 0;
 	// change z pos so player center is where the portal center is
 	player_half_height = is_crouched ? 18 : 36;
 	player_setpos = entry_origin;
@@ -145,10 +211,10 @@ VagSearcher::VagSearchResult VagSearcher::RunIteration()
 		crash = false;
 		return WOULD_CAUSE_CRASH;
 	}
-	auto new_player_pos = utils::GetProperty<Vector>(0, "m_vecOrigin");
+	auto new_player_pos = spt_propertyGetter.GetProperty<Vector>(0, "m_vecOrigin");
 	new_player_pos.z += player_half_height;
 
-	auto player_portal_idx = utils::GetProperty<int>(0, "m_hPortalEnvironment") & 0xfff;
+	auto player_portal_idx = spt_propertyGetter.GetProperty<int>(0, "m_hPortalEnvironment") & 0xfff;
 
 	DevMsg("Player pos: %f %f %f\n", new_player_pos.x, new_player_pos.y, new_player_pos.z);
 	if (player_portal_idx == entry_index)

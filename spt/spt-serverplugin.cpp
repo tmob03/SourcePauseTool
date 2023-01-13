@@ -1,5 +1,4 @@
-#include "stdafx.h"
-#include "..\stdafx.hpp"
+#include "stdafx.hpp"
 
 #include <chrono>
 #include <functional>
@@ -43,8 +42,6 @@
 #endif
 
 #include "SPTLib\sptlib.hpp"
-#include "overlay\overlay-renderer.hpp"
-#include "overlay\overlays.hpp"
 #include "tier0\memdbgoff.h" // YaLTeR - switch off the memory debugging.
 using namespace std::literals;
 
@@ -66,6 +63,8 @@ namespace interfaces
 	IClientEntityList* entList;
 	IVModelInfo* modelInfo;
 	IBaseClientDLL* clientInterface;
+	IEngineTrace* engineTraceClient = nullptr;
+	IServerPluginHelpers* pluginHelpers = nullptr;
 } // namespace interfaces
 
 ConVar* _viewmodel_fov = nullptr;
@@ -175,6 +174,9 @@ bool CSourcePauseTool::Load(CreateInterfaceFn interfaceFactory, CreateInterfaceF
 	interfaces::entList = (IClientEntityList*)clientFactory(VCLIENTENTITYLIST_INTERFACE_VERSION, NULL);
 	interfaces::modelInfo = (IVModelInfo*)interfaceFactory(VMODELINFO_SERVER_INTERFACE_VERSION, NULL);
 	interfaces::clientInterface = (IBaseClientDLL*)clientFactory(CLIENT_DLL_INTERFACE_VERSION, NULL);
+	interfaces::engineTraceClient = (IEngineTrace*)interfaceFactory(INTERFACEVERSION_ENGINETRACE_CLIENT, NULL);
+	interfaces::pluginHelpers =
+	    (IServerPluginHelpers*)interfaceFactory(INTERFACEVERSION_ISERVERPLUGINHELPERS, NULL);
 
 	if (interfaces::gm)
 	{
@@ -187,15 +189,11 @@ bool CSourcePauseTool::Load(CreateInterfaceFn interfaceFactory, CreateInterfaceF
 	}
 
 	if (g_pCVar)
-#if defined(OE)
-	{
-		_viewmodel_fov = g_pCVar->FindVar("viewmodel_fov");
-	}
-#else
 	{
 #define GETCVAR(x) _##x = g_pCVar->FindVar(#x);
-#define GETCMD(x) _##x = g_pCVar->FindCommand(#x);
-
+#ifdef OE
+		GETCVAR(viewmodel_fov);
+#endif
 		GETCVAR(sv_airaccelerate);
 		GETCVAR(sv_accelerate);
 		GETCVAR(sv_friction);
@@ -205,11 +203,14 @@ bool CSourcePauseTool::Load(CreateInterfaceFn interfaceFactory, CreateInterfaceF
 		GETCVAR(sv_gravity);
 		GETCVAR(sv_maxvelocity);
 		GETCVAR(sv_bounce);
-		GETCVAR(sv_cheats)
+		GETCVAR(sv_cheats);
+
+#ifndef OE
+#define GETCMD(x) _##x = g_pCVar->FindCommand(#x);
 		GETCMD(record);
 		GETCMD(stop);
-	}
 #endif
+	}
 
 #if !defined(BMS)
 	auto ptr = interfaceFactory(VENGINE_CLIENT_INTERFACE_VERSION, NULL);
@@ -315,6 +316,8 @@ bool CSourcePauseTool::Load(CreateInterfaceFn interfaceFactory, CreateInterfaceF
 	return true;
 }
 
+extern "C" IMAGE_DOS_HEADER __ImageBase; 
+
 void CSourcePauseTool::Unload(void)
 {
 	if (skipUnload)
@@ -323,6 +326,24 @@ void CSourcePauseTool::Unload(void)
 		skipUnload = false; // Enable unloading again
 		return;
 	}
+
+	#ifdef SSDK2007
+	// Replace the plugin handler with the real handle right before the engine tries to unload.
+	// This allows it to actually do so.
+	// In newer branches (after 3420) this is redundant but doesn't do any harm.
+	auto& plugins = *(CUtlVector<void*>*)((uint32_t)interfaces::pluginHelpers + 4);
+	extern CSourcePauseTool g_SourcePauseTool;
+	for (int i = 0; i < plugins.Count(); i++)
+	{
+		// m_pPlugin
+		if (*(IServerPluginCallbacks**)((uint32_t)plugins[i] + 132) == &g_SourcePauseTool)
+		{
+			// m_pPluginModule
+			*(void**)((uint32_t)plugins[i] + 140) = ((void*)&__ImageBase);
+			break;
+		}
+	}
+	#endif
 
 	Cvar_UnregisterSPTCvars();
 	DisconnectTier1Libraries();

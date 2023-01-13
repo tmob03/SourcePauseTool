@@ -1,8 +1,9 @@
-#include "stdafx.h"
+#include "stdafx.hpp"
 
 #include "framebulk_handler.hpp"
 
 #include "string_utils.hpp"
+#include "game_detection.hpp"
 
 namespace scripts
 {
@@ -12,6 +13,7 @@ namespace scripts
 	const std::string FIELD0_FILLED = "s**ljdbcgu";
 	const std::string FIELD1_FILLED = "flrbud";
 	const std::string FIELD2_FILLED = "jdu12rws";
+	const std::string MM_FIELD2_FILLED = "jdu12wsklrx"; // DMoMM
 	const std::string EMPTY_FIELD = "-";
 	const char NOOP = '<';
 	const char WILDCARD = '*';
@@ -26,7 +28,7 @@ namespace scripts
 	const auto JUMPBUG = std::pair<int, int>(0, 6);
 	const auto DUCK_BEFORE_COLLISION = std::pair<int, int>(0, 7);
 	const auto DUCK_BEFORE_GROUND = std::pair<int, int>(0, 8);
-	const auto USE_SPAM = std::pair<int, int>(0, 9);
+	const auto USESPAM = std::pair<int, int>(0, 9);
 
 	const auto FORWARD = std::pair<int, int>(1, 0);
 	const auto LEFT = std::pair<int, int>(1, 1);
@@ -43,6 +45,14 @@ namespace scripts
 	const auto RELOAD = std::pair<int, int>(2, 5);
 	const auto WALK = std::pair<int, int>(2, 6);
 	const auto SPEED = std::pair<int, int>(2, 7);
+
+	// DMoMM
+	const auto MM_WALK = std::pair<int, int>(2, 5);
+	const auto MM_SPRINT = std::pair<int, int>(2, 6);
+	const auto MM_KICK = std::pair<int, int>(2, 7);
+	const auto MM_LEANLEFT = std::pair<int, int>(2, 8);
+	const auto MM_LEANRIGHT = std::pair<int, int>(2, 9);
+	const auto MM_XANA = std::pair<int, int>(2, 10);
 
 	const auto YAW_KEY = std::pair<int, int>(3, 0);
 	const auto PITCH_KEY = std::pair<int, int>(4, 0);
@@ -72,23 +82,22 @@ namespace scripts
 		else
 			frameBulkInfo.AddCommand("y_spt_autojump 0");
 
-		frameBulkInfo.AddPlusMinusCmd("y_spt_duckspam", frameBulkInfo.ContainsFlag(DUCKSPAM, "d"));
+		frameBulkInfo.AddPlusMinusCmd("y_spt_spam duck", frameBulkInfo.ContainsFlag(DUCKSPAM, "d"));
+		frameBulkInfo.AddPlusMinusCmd("y_spt_spam use", frameBulkInfo.ContainsFlag(USESPAM, "u"));
 
 		if (frameBulkInfo.ContainsFlag(JUMPBUG, "b"))
 			frameBulkInfo.AddCommand("tas_strafe_autojb 1");
 		else
 			frameBulkInfo.AddCommand("tas_strafe_autojb 0");
 
-			// todo
-#pragma warning(push)
-#pragma warning(disable : 4390)
-		if (frameBulkInfo.ContainsFlag(USE_SPAM, "u"))
-			;
 		if (frameBulkInfo.ContainsFlag(LGAGST, "l"))
 			frameBulkInfo.AddCommand("tas_strafe_lgagst 1");
 		else
 			frameBulkInfo.AddCommand("tas_strafe_lgagst 0");
 
+#pragma warning(push)
+#pragma warning(disable : 4390)
+		// todo
 		if (frameBulkInfo.ContainsFlag(DUCK_BEFORE_COLLISION, "c"))
 			;
 		if (frameBulkInfo.ContainsFlag(DUCK_BEFORE_GROUND, "g"))
@@ -121,9 +130,21 @@ namespace scripts
 		frameBulkInfo.AddPlusMinusCmd("use", frameBulkInfo.ContainsFlag(USE, "u"));
 		frameBulkInfo.AddPlusMinusCmd("attack", frameBulkInfo.ContainsFlag(ATTACK1, "1"));
 		frameBulkInfo.AddPlusMinusCmd("attack2", frameBulkInfo.ContainsFlag(ATTACK2, "2"));
-		frameBulkInfo.AddPlusMinusCmd("reload", frameBulkInfo.ContainsFlag(RELOAD, "r"));
-		frameBulkInfo.AddPlusMinusCmd("walk", frameBulkInfo.ContainsFlag(WALK, "w"));
-		frameBulkInfo.AddPlusMinusCmd("speed", frameBulkInfo.ContainsFlag(SPEED, "s"));
+		if (utils::DoesGameLookLikeDMoMM())
+		{
+			frameBulkInfo.AddPlusMinusCmd("speed", frameBulkInfo.ContainsFlag(MM_WALK, "w"));
+			frameBulkInfo.AddPlusMinusCmd("sprint", frameBulkInfo.ContainsFlag(MM_SPRINT, "s"));
+			frameBulkInfo.AddPlusMinusCmd("kick", frameBulkInfo.ContainsFlag(MM_KICK, "k"));
+			frameBulkInfo.AddPlusMinusCmd("leanleft", frameBulkInfo.ContainsFlag(MM_LEANLEFT, "l"));
+			frameBulkInfo.AddPlusMinusCmd("leanright", frameBulkInfo.ContainsFlag(MM_LEANRIGHT, "r"));
+			frameBulkInfo.AddPlusMinusCmd("xana", frameBulkInfo.ContainsFlag(MM_XANA, "x"));
+		}
+		else
+		{
+			frameBulkInfo.AddPlusMinusCmd("reload", frameBulkInfo.ContainsFlag(RELOAD, "r"));
+			frameBulkInfo.AddPlusMinusCmd("walk", frameBulkInfo.ContainsFlag(WALK, "w"));
+			frameBulkInfo.AddPlusMinusCmd("speed", frameBulkInfo.ContainsFlag(SPEED, "s"));
+		}
 	}
 
 	void Field4_5(FrameBulkInfo& frameBulkInfo)
@@ -164,7 +185,10 @@ namespace scripts
 	{
 		frameBulkInfo.ValidateFieldFlags(frameBulkInfo, FIELD0_FILLED, 0);
 		frameBulkInfo.ValidateFieldFlags(frameBulkInfo, FIELD1_FILLED, 1);
-		frameBulkInfo.ValidateFieldFlags(frameBulkInfo, FIELD2_FILLED, 2);
+		if (utils::DoesGameLookLikeDMoMM())
+			frameBulkInfo.ValidateFieldFlags(frameBulkInfo, MM_FIELD2_FILLED, 2);
+		else
+			frameBulkInfo.ValidateFieldFlags(frameBulkInfo, FIELD2_FILLED, 2);
 	}
 
 	void InitHandlers()

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include "cdll_int.h"
 #include "client_class.h"
 #include "engine\ivmodelinfo.h"
@@ -8,13 +9,10 @@
 #include "iserverunknown.h"
 #include "trace.h"
 
-#ifndef OE
-const int INDEX_MASK = MAX_EDICTS - 1;
-#endif
+#define INDEX_MASK (MAX_EDICTS - 1)
 
 namespace utils
 {
-#ifndef OE
 	struct propValue
 	{
 		std::string name;
@@ -40,7 +38,6 @@ namespace utils
 	int FillInfoArray(std::string argString, wchar* arr, int maxEntries, int bufferSize, char sep, char entSep);
 	void SimulateFrames(int frames);
 	int GetIndex(void* ent);
-#endif
 	IServerUnknown* GetServerPlayer();
 	struct JBData
 	{

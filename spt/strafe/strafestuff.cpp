@@ -1,5 +1,4 @@
-#include "stdafx.h"
-#include "..\stdafx.hpp"
+#include "stdafx.hpp"
 
 #ifdef OE
 #include "mathlib.h"
@@ -17,16 +16,13 @@
 #include "ent_utils.hpp"
 #include "game_detection.hpp"
 #include "math.hpp"
-#include "property_getter.hpp"
 #include "..\features\playerio.hpp"
 #include "..\features\tracing.hpp"
 #include "..\features\autojump.hpp"
 #include "SDK\hl_movedata.h"
 #include "interfaces.hpp"
 
-#ifndef OE
-#include "..\overlay\portal_camera.hpp"
-#endif
+#include "spt\utils\portal_utils.hpp"
 
 #ifdef max
 #undef max

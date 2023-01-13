@@ -1,16 +1,92 @@
-#include "stdafx.h"
+#include "stdafx.hpp"
+
 #ifndef OE
-#include "camera.hpp"
-#include "playerio.hpp"
-#include "interfaces.hpp"
-#include "signals.hpp"
-#include "command.hpp"
-#include "..\sptlib-wrapper.hpp"
-#include "..\cvars.hpp"
+
+#include "spt\feature.hpp"
+#include "spt\features\demo.hpp"
+#include "spt\features\playerio.hpp"
+#include "spt\features\overlay.hpp"
+#include "spt\utils\command.hpp"
+#include "spt\utils\interfaces.hpp"
+#include "spt\utils\signals.hpp"
+#include "spt\cvars.hpp"
 
 #include "usercmd.h"
+#include "view_shared.h"
 
 #include <chrono>
+#include <sstream>
+#include <map>
+
+// Camera stuff
+class Camera : public FeatureWrapper<Camera>
+{
+public:
+	enum CameraInfoParameter
+	{
+		ORIGIN_X,
+		ORIGIN_Y,
+		ORIGIN_Z,
+		ANGLES_X,
+		ANGLES_Y,
+		ANGLES_Z,
+		FOV
+	};
+	struct CameraInfo
+	{
+		Vector origin = Vector();
+		QAngle angles = QAngle();
+		float fov = 75.0f;
+		operator std::string() const
+		{
+			std::ostringstream s;
+			s << "pos: " << origin.x << " " << origin.y << " " << origin.z << '\n';
+			s << "ang: " << angles.x << " " << angles.y << " " << angles.z << '\n';
+			s << "fov: " << fov;
+			return s.str();
+		}
+	};
+	CameraInfo current_cam;
+	std::map<int, CameraInfo> keyframes;
+
+	bool CanOverrideView() const;
+	bool CanInput() const;
+	void RecomputeInterpPath();
+
+protected:
+	virtual bool ShouldLoadFeature() override;
+	virtual void InitHooks() override;
+	virtual void PreHook() override;
+	virtual void LoadFeature() override;
+	virtual void UnloadFeature() override;
+
+private:
+	DECL_HOOK_THISCALL(void, ClientModeShared__OverrideView, CViewSetup* viewSetup);
+	DECL_HOOK_THISCALL(bool, ClientModeShared__CreateMove, float flInputSampleTime, void* cmd);
+	DECL_HOOK_THISCALL(bool, C_BasePlayer__ShouldDrawLocalPlayer);
+	DECL_HOOK_THISCALL(void, CInput__MouseMove, void* cmd);
+#if defined(SSDK2013)
+	DECL_HOOK_THISCALL(bool, C_BasePlayer__ShouldDrawThisPlayer);
+#endif
+
+	void OverrideView(CViewSetup* viewSetup);
+	void HandleDriveMode(bool active);
+	void HandleInput(bool active);
+	void HandleCinematicMode(bool active);
+	static std::vector<Vector> CameraInfoToPoints(float* x, CameraInfo* y, CameraInfoParameter param);
+	CameraInfo InterpPath(float time);
+	void GetCurrentView();
+	void RefreshTimeOffset();
+	void DrawPath();
+
+	bool loadingSuccessful = false;
+
+	int old_cursor[2] = {0, 0};
+	float time_offset = 0.0f;
+	std::vector<CameraInfo> interp_path_cache;
+
+	const ConVar* sensitivity;
+};
 
 Camera spt_camera;
 
@@ -268,9 +344,8 @@ bool Camera::CanInput() const
 void Camera::GetCurrentView()
 {
 	current_cam.origin = spt_playerio.GetPlayerEyePos();
-	float ang[3];
-	EngineGetViewAngles(ang);
-	current_cam.angles = QAngle(ang[0], ang[1], 0);
+	QAngle ang = utils::GetPlayerEyeAngles();
+	current_cam.angles = QAngle(ang.x, ang.y, 0);
 }
 
 void Camera::RefreshTimeOffset()
@@ -278,21 +353,21 @@ void Camera::RefreshTimeOffset()
 	time_offset = interfaces::engine_tool->ClientTime() - spt_demostuff.Demo_GetPlaybackTick() / 66.6666f;
 }
 
-void Camera::OverrideView(CViewSetup* view)
+void Camera::OverrideView(CViewSetup* viewSetup)
 {
 	int control_type = CanOverrideView() ? y_spt_cam_control.GetInt() : 0;
 	if (_y_spt_force_fov.GetBool())
 		current_cam.fov = _y_spt_force_fov.GetFloat();
 	else
-		current_cam.fov = view->fov;
+		current_cam.fov = viewSetup->fov;
 	HandleDriveMode(control_type == 1);
 	HandleCinematicMode(control_type == 2 && spt_demostuff.Demo_IsPlayingBack());
 	if (control_type)
 	{
-		view->origin = current_cam.origin;
-		view->angles = current_cam.angles;
+		viewSetup->origin = current_cam.origin;
+		viewSetup->angles = current_cam.angles;
 	}
-	view->fov = current_cam.fov;
+	viewSetup->fov = current_cam.fov;
 }
 
 void Camera::HandleDriveMode(bool active)
@@ -613,7 +688,7 @@ void Camera::DrawPath()
 #define NDEBUG_PERSIST_TILL_NEXT_SERVER 0.01023f
 #endif
 
-	for (int i = 0; i < interp_path_cache.size(); i++)
+	for (size_t i = 0; i < interp_path_cache.size(); i++)
 	{
 		auto current = interp_path_cache[i];
 		Vector forward;
@@ -651,10 +726,10 @@ void Camera::DrawPath()
 	}
 }
 
-HOOK_THISCALL(void, Camera, ClientModeShared__OverrideView, CViewSetup* view)
+HOOK_THISCALL(void, Camera, ClientModeShared__OverrideView, CViewSetup* viewSetup)
 {
-	spt_camera.OverrideView(view);
-	spt_camera.ORIG_ClientModeShared__OverrideView(thisptr, edx, view);
+	spt_camera.ORIG_ClientModeShared__OverrideView(thisptr, edx, viewSetup);
+	spt_camera.OverrideView(viewSetup);
 }
 
 HOOK_THISCALL(bool, Camera, ClientModeShared__CreateMove, float flInputSampleTime, void* cmd)
@@ -671,9 +746,27 @@ HOOK_THISCALL(bool, Camera, ClientModeShared__CreateMove, float flInputSampleTim
 	return spt_camera.ORIG_ClientModeShared__CreateMove(thisptr, edx, flInputSampleTime, cmd);
 }
 
+static bool ShouldDrawPlayerModel()
+{
+	if (!spt_camera.CanOverrideView() || !y_spt_cam_control.GetBool())
+		return false;
+
+#ifdef SPT_OVERLAY_ENABLED
+	// Don't draw playe rmodel in overlay
+	if (_y_spt_overlay.GetBool())
+	{
+		bool renderingOverlay = spt_overlay.renderingOverlay;
+		if (_y_spt_overlay_swap.GetBool())
+			renderingOverlay = !renderingOverlay;
+		return !renderingOverlay;
+	}
+#endif
+	return true;
+}
+
 HOOK_THISCALL(bool, Camera, C_BasePlayer__ShouldDrawLocalPlayer)
 {
-	if (spt_camera.CanOverrideView() && y_spt_cam_control.GetBool())
+	if (ShouldDrawPlayerModel())
 	{
 		return true;
 	}
@@ -685,7 +778,7 @@ HOOK_THISCALL(bool, Camera, C_BasePlayer__ShouldDrawThisPlayer)
 {
 	// ShouldDrawLocalPlayer only decides draw view model or weapon model in steampipe
 	// We need ShouldDrawThisPlayer to make player model draw
-	if (spt_camera.CanOverrideView() && y_spt_cam_control.GetBool())
+	if (ShouldDrawPlayerModel())
 	{
 		return true;
 	}

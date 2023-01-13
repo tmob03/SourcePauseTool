@@ -1,16 +1,106 @@
-#include "stdafx.h"
-#if defined(SSDK2007)
-#include "ihud.hpp"
+#include "stdafx.hpp"
 
-#include "..\cvars.hpp"
-#include "command.hpp"
-#include "interfaces.hpp"
-#include "playerio.hpp"
-#include "signals.hpp"
-#include "property_getter.hpp"
-#include "..\sptlib-wrapper.hpp"
+#include "hud.hpp"
+
+#ifdef SPT_HUD_ENABLED
+
+#include "spt\feature.hpp"
+#include "spt\features\playerio.hpp"
+#include "spt\features\property_getter.hpp"
+#include "spt\utils\command.hpp"
+#include "spt\utils\interfaces.hpp"
+#include "spt\utils\signals.hpp"
+
+#include "basehandle.h"
+#include "Color.h"
+
+#ifdef OE
+#include "..\game_shared\usercmd.h"
+#else
+#include "usercmd.h"
+#endif
 
 #include <cctype>
+#include <algorithm>
+
+#undef min
+#undef max
+
+// Input HUD
+class InputHud : public FeatureWrapper<InputHud>
+{
+public:
+	void DrawInputHud();
+	void SetInputInfo(int button, Vector movement);
+	bool ModifySetting(const char* element, const char* param, const char* value);
+
+#ifndef OE
+	void AddCustomKey(const char* key);
+#endif
+
+	struct Button
+	{
+		bool is_normal_key;
+		bool enabled;
+		std::wstring text;
+		std::string font;
+		int x;
+		int y;
+		int width;
+		int height;
+		Color background;
+		Color highlight;
+		Color textcolor;
+		Color texthighlight;
+		// used as button code if not normal key
+		int mask;
+	};
+	bool tasPreset = false;
+	std::map<std::string, Button> buttonSettings;
+	Button anglesSetting;
+
+protected:
+	virtual bool ShouldLoadFeature() override;
+
+	virtual void InitHooks() override;
+
+	virtual void LoadFeature() override;
+
+	virtual void PreHook() override;
+
+	virtual void UnloadFeature() override;
+
+private:
+	DECL_HOOK_THISCALL(void, DecodeUserCmdFromBuffer, bf_read& buf, int sequence_number);
+	void CreateMove(uintptr_t pCmd);
+	void DrawRectAndCenterTxt(Color buttonColor,
+	                          int x0,
+	                          int y0,
+	                          int x1,
+	                          int y1,
+	                          const std::string& fontName,
+	                          Color textColor,
+	                          const wchar_t* text);
+	void DrawButton(Button button);
+	Color StringToColor(const char* hex);
+	void GetCurrentSize(int& x, int& y);
+
+	IMatSystemSurface* surface;
+
+	int xOffset;
+	int yOffset;
+	int gridSize;
+	int padding;
+
+	Vector inputMovement;
+	QAngle currentAng;
+	QAngle previousAng;
+	int buttonBits;
+
+	bool awaitingFrameDraw;
+
+	bool loadingSuccessful = false;
+};
 
 InputHud spt_ihud;
 
@@ -211,6 +301,7 @@ CON_COMMAND_AUTOCOMPLETE(y_spt_ihud_preset,
 	}
 }
 
+#ifndef OE
 CON_COMMAND(y_spt_ihud_add_key, "y_spt_ihud_add_key <key> - Add custom key to ihud.")
 {
 	if (args.ArgC() != 2)
@@ -220,10 +311,18 @@ CON_COMMAND(y_spt_ihud_add_key, "y_spt_ihud_add_key <key> - Add custom key to ih
 	}
 	spt_ihud.AddCustomKey(args.Arg(1));
 }
+#endif
 
 namespace patterns
 {
-	PATTERNS(DecodeUserCmdFromBuffer, "5135", "83 EC 54 33 C0 D9 EE 89 44 24 ?? D9 54 24 ?? 89 44 24 ??");
+	PATTERNS(
+	    DecodeUserCmdFromBuffer,
+	    "5135",
+	    "83 EC 54 33 C0 D9 EE 89 44 24 ?? D9 54 24 ?? 89 44 24 ??",
+	    "7197370",
+	    "55 8B EC 83 EC 54 56 8B F1 C7 45 ?? ?? ?? ?? ?? 8D 4D ?? C7 45 ?? 00 00 00 00 C7 45 ?? 00 00 00 00 C7 45 ?? 00 00 00 00 C7 45 ?? 00 00 00 00 C7 45 ?? 00 00 00 00 E8 ?? ?? ?? ?? 8B 4D ??",
+	    "4044",
+	    "83 EC 54 53 57 8D 44 24 ?? 50 8B 44 24 ?? 99");
 }
 
 void InputHud::InitHooks()
@@ -248,7 +347,11 @@ void InputHud::LoadFeature()
 	{
 		InitCommand(y_spt_ihud_modify);
 		InitCommand(y_spt_ihud_preset);
+
+#ifndef OE
 		InitCommand(y_spt_ihud_add_key);
+#endif
+
 		InitConcommandBase(y_spt_ihud_grid_size);
 		InitConcommandBase(y_spt_ihud_grid_padding);
 		InitConcommandBase(y_spt_ihud_x);
@@ -401,6 +504,7 @@ bool InputHud::ModifySetting(const char* element, const char* param, const char*
 	return true;
 }
 
+#ifndef OE
 void InputHud::AddCustomKey(const char* key)
 {
 	ButtonCode_t code = interfaces::inputSystem->StringToButtonCode(key);
@@ -415,6 +519,7 @@ void InputHud::AddCustomKey(const char* key)
 	buttonSettings[str] =
 	    {false, true, wstr, font, 0, 0, 1, 1, background, highlight, textcolor, texthighlight, code};
 }
+#endif
 
 Color InputHud::StringToColor(const char* color)
 {
@@ -441,8 +546,8 @@ void InputHud::GetCurrentSize(int& x, int& y)
 	int gridWidth = 0;
 	int gridHeight = 0;
 
-	int gridSize = y_spt_ihud_grid_size.GetInt();
-	int padding = y_spt_ihud_grid_padding.GetInt();
+	gridSize = y_spt_ihud_grid_size.GetInt();
+	padding = y_spt_ihud_grid_padding.GetInt();
 
 	if (tasPreset)
 	{
@@ -482,9 +587,7 @@ void InputHud::DrawInputHud()
 	if (awaitingFrameDraw)
 	{
 		previousAng = currentAng;
-		float va[3];
-		EngineGetViewAngles(va);
-		currentAng = Vector(va[0], va[1], va[3]);
+		currentAng = utils::GetPlayerEyeAngles();
 		awaitingFrameDraw = false;
 	}
 
@@ -493,8 +596,8 @@ void InputHud::DrawInputHud()
 	// get offset from percentage
 	int ihudSizeX, ihudSizeY;
 	GetCurrentSize(ihudSizeX, ihudSizeY);
-	xOffset = (spt_hud.screen->width - ihudSizeX) * y_spt_ihud_x.GetFloat() * 0.01f;
-	yOffset = (spt_hud.screen->height - ihudSizeY) * y_spt_ihud_y.GetFloat() * 0.01f;
+	xOffset = (spt_hud.renderView->width - ihudSizeX) * y_spt_ihud_x.GetFloat() * 0.01f;
+	yOffset = (spt_hud.renderView->height - ihudSizeY) * y_spt_ihud_y.GetFloat() * 0.01f;
 
 	gridSize = y_spt_ihud_grid_size.GetInt();
 	padding = y_spt_ihud_grid_padding.GetInt();
@@ -525,7 +628,7 @@ void InputHud::DrawInputHud()
 			// Movement
 			Vector movement = inputMovement;
 			int movementSpeed = movement.Length();
-			float maxSpeed = utils::GetProperty<float>(0, "m_flMaxspeed");
+			float maxSpeed = spt_propertyGetter.GetProperty<float>(0, "m_flMaxspeed");
 			movement /= movementSpeed > maxSpeed ? movementSpeed : maxSpeed;
 
 			// Draw
@@ -552,7 +655,7 @@ void InputHud::DrawInputHud()
 			int th = surface->GetFontTall(anglesSettingFont);
 			surface->DrawSetTextFont(anglesSettingFont);
 			surface->DrawSetTextColor(anglesSetting.textcolor);
-			wchar_t* text = L"move analog";
+			const wchar_t* text = L"move analog";
 			surface->DrawSetTextPos(cX1 - r, cY1 - r - th);
 			surface->DrawPrintText(text, wcslen(text));
 			text = L"view analog";
@@ -660,9 +763,9 @@ void InputHud::DrawRectAndCenterTxt(Color buttonColor,
                                     Color textColor,
                                     const wchar_t* text)
 {
-	vgui::HFont font;
+	vgui::HFont rectFont;
 
-	if (!spt_hud.GetFont(fontName, font))
+	if (!spt_hud.GetFont(fontName, rectFont))
 	{
 		return;
 	}
@@ -671,10 +774,10 @@ void InputHud::DrawRectAndCenterTxt(Color buttonColor,
 	surface->DrawFilledRect(x0, y0, x1, y1);
 
 	int tw, th;
-	surface->GetTextSize(font, text, tw, th);
+	surface->GetTextSize(rectFont, text, tw, th);
 	int xc = x0 + ((x1 - x0) / 2);
 	int yc = y0 + ((y1 - y0) / 2);
-	surface->DrawSetTextFont(font);
+	surface->DrawSetTextFont(rectFont);
 	surface->DrawSetTextColor(textColor);
 	surface->DrawSetTextPos(xc - (tw / 2), yc - (th / 2));
 	surface->DrawPrintText(text, wcslen(text));

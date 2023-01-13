@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "stdafx.hpp"
 #include "..\cvars.hpp"
 #include "..\sptlib-wrapper.hpp"
 #include "..\strafe\strafestuff.hpp"
@@ -10,10 +10,10 @@
 #include "ent_utils.hpp"
 #include "interfaces.hpp"
 #include "signals.hpp"
-#include "..\overlay\portal_camera.hpp"
-#include "ihud.hpp"
 #include "tas.hpp"
 #include "property_getter.hpp"
+#include "spt\utils\portal_utils.hpp"
+#include "spt\utils\command.hpp"
 #include "..\strafe\strafestuff.hpp"
 
 #ifdef SSDK2007
@@ -56,7 +56,9 @@ namespace patterns
 	    "6879",
 	    "55 8B EC 83 EC 0C 56 8B F1 8B 0D ?? ?? ?? ?? 8B 01 8B 90 ?? ?? ?? ?? 57 89 75 F8 FF D2 8B F8 C7 45",
 	    "missinginfo1_4_7",
-	    "55 8B EC 83 EC 08 89 4D F8 C7 45 ?? ?? ?? ?? ?? 83 7D 08 00 0F 95 C0 50 68 ?? ?? ?? ?? 8B 0D");
+	    "55 8B EC 83 EC 08 89 4D F8 C7 45 ?? ?? ?? ?? ?? 83 7D 08 00 0F 95 C0 50 68 ?? ?? ?? ?? 8B 0D",
+	    "dmomm",
+	    "51 53 56 8B 35 ?? ?? ?? ?? 57 8B 7C 24 ?? 85 FF 0F 95 C3");
 	PATTERNS(
 	    CreateMove,
 	    "5135",
@@ -72,7 +74,11 @@ namespace patterns
 	    "BMS-Retail",
 	    "55 8B EC 83 EC 54 53 56 8B 75 08 B8 ?? ?? ?? ?? F7 EE 57 03 D6 8B F9 C1 FA 06 8B CE 8B C2 C1 E8 1F 03 C2 6B C0 5A",
 	    "hl1movement",
-	    "55 8B EC 83 EC 18 53 56 57 8B 7D ?? B8 ?? ?? ?? ?? F7 EF 8B F1 8B CF 03 D7 C1 FA 06 8B C2 C1 E8 1F 03 C2 6B C0 5A");
+	    "55 8B EC 83 EC 18 53 56 57 8B 7D ?? B8 ?? ?? ?? ?? F7 EF 8B F1 8B CF 03 D7 C1 FA 06 8B C2 C1 E8 1F 03 C2 6B C0 5A",
+	    "4044",
+	    "8B 44 24 ?? 83 EC 1C 53 55 56 57",
+	    "dmomm",
+	    "83 EC 10 53 8B 5C 24 ?? 55 56 8B F1");
 	PATTERNS(
 	    GetGroundEntity,
 	    "5135",
@@ -96,10 +102,14 @@ void PlayerIOFeature::InitHooks()
 
 bool PlayerIOFeature::ShouldLoadFeature()
 {
-	return interfaces::engine != nullptr && spt_entutils.ShouldLoadFeature();
+	return interfaces::engine != nullptr && spt_entprops.ShouldLoadFeature();
 }
 
-void PlayerIOFeature::UnloadFeature() {}
+void PlayerIOFeature::UnloadFeature()
+{
+	fetchedPlayerFields = false;
+	cinput_thisptr = nullptr;
+}
 
 void PlayerIOFeature::PreHook()
 {
@@ -113,11 +123,11 @@ void PlayerIOFeature::PreHook()
 		{
 			offM_pCommands = 224;
 		}
-		else if (index == 0)
+		else if (index == 0) // 5135
 		{
 			offM_pCommands = 180;
 		}
-		else if (utils::DoesGameLookLikeBMS())
+		else if (index == 7 || index == 8 || utils::DoesGameLookLikeBMS()) // OE & BMS
 		{
 			offM_pCommands = 244;
 		}
@@ -183,6 +193,9 @@ Strafe::MovementVars PlayerIOFeature::GetMovementVars()
 	else
 		vars.WishspeedCap = 30;
 
+#ifdef OE
+	vars.EntFriction = 1.0f;
+#else
 	auto previouslyPredictedOrigin = m_vecPreviouslyPredictedOrigin.GetValue();
 	auto absOrigin = m_vecAbsOrigin.GetValue();
 	bool gameCodeMovedPlayer = (previouslyPredictedOrigin != absOrigin);
@@ -209,6 +222,7 @@ Strafe::MovementVars PlayerIOFeature::GetMovementVars()
 			}
 		}
 	}
+#endif
 
 	vars.EntGravity = 1.0f;
 	vars.Maxvelocity = _sv_maxvelocity->GetFloat();
@@ -270,25 +284,14 @@ int __fastcall PlayerIOFeature::HOOKED_GetButtonBits_Func(void* thisptr, int edx
 
 	if (bResetState == 1)
 	{
-		static bool duckPressed = false;
-
-		if (duckspam)
-		{
-			if (duckPressed)
-				duckPressed = false;
-			else
-			{
-				duckPressed = true;
-				rv |= (1 << 2); // IN_DUCK
-			}
-		}
-		else
-			duckPressed = false;
+		static int keyPressed = 0;
+		keyPressed = (keyPressed ^ spamButtons) & spamButtons;
+		rv |= keyPressed;
 
 		if (forceJump)
 		{
-			forceJump = false;
 			rv |= (1 << 1); // IN_JUMP
+			forceJump = false;
 		}
 
 		if (forceUnduck)
@@ -361,30 +364,29 @@ Vector PlayerIOFeature::GetPlayerEyePos()
 
 void PlayerIOFeature::GetPlayerFields()
 {
-	static bool fetched = false;
-	if (fetched)
+	if (fetchedPlayerFields)
 		return;
 
-	if (spt_entutils.ShouldLoadFeature())
+	if (spt_entprops.ShouldLoadFeature())
 	{
-		m_afPhysicsFlags = spt_entutils.GetPlayerField<int>("m_afPhysicsFlags");
-		m_bDucking = spt_entutils.GetPlayerField<bool>("m_Local.m_bDucking");
-		m_CollisionGroup = spt_entutils.GetPlayerField<int>("m_CollisionGroup");
-		m_fFlags = spt_entutils.GetPlayerField<int>("m_fFlags");
-		m_flDuckJumpTime = spt_entutils.GetPlayerField<float>("m_Local.m_flDuckJumpTime");
-		m_flMaxspeed = spt_entutils.GetPlayerField<float>("m_flMaxspeed");
-		m_hGroundEntity = spt_entutils.GetPlayerField<int>("m_hGroundEntity");
-		m_MoveCollide = spt_entutils.GetPlayerField<int>("m_MoveCollide");
-		m_MoveType = spt_entutils.GetPlayerField<int>("m_MoveType");
-		m_vecAbsOrigin = spt_entutils.GetPlayerField<Vector>("m_vecAbsOrigin");
-		m_vecAbsVelocity = spt_entutils.GetPlayerField<Vector>("m_vecAbsVelocity");
-		m_vecPreviouslyPredictedOrigin = spt_entutils.GetPlayerField<Vector>("m_vecPreviouslyPredictedOrigin");
-		m_vecPunchAngle = spt_entutils.GetPlayerField<QAngle>("m_Local.m_vecPunchAngle");
-		m_vecPunchAngleVel = spt_entutils.GetPlayerField<QAngle>("m_Local.m_vecPunchAngleVel");
-		m_vecViewOffset = spt_entutils.GetPlayerField<Vector>("m_vecViewOffset");
+		m_afPhysicsFlags = spt_entprops.GetPlayerField<int>("m_afPhysicsFlags");
+		m_bDucking = spt_entprops.GetPlayerField<bool>("m_Local.m_bDucking");
+		m_CollisionGroup = spt_entprops.GetPlayerField<int>("m_CollisionGroup");
+		m_fFlags = spt_entprops.GetPlayerField<int>("m_fFlags");
+		m_flDuckJumpTime = spt_entprops.GetPlayerField<float>("m_Local.m_flDuckJumpTime");
+		m_flMaxspeed = spt_entprops.GetPlayerField<float>("m_flMaxspeed");
+		m_hGroundEntity = spt_entprops.GetPlayerField<int>("m_hGroundEntity");
+		m_MoveCollide = spt_entprops.GetPlayerField<int>("m_MoveCollide");
+		m_MoveType = spt_entprops.GetPlayerField<int>("m_MoveType");
+		m_vecAbsOrigin = spt_entprops.GetPlayerField<Vector>("m_vecAbsOrigin");
+		m_vecAbsVelocity = spt_entprops.GetPlayerField<Vector>("m_vecAbsVelocity");
+		m_vecPreviouslyPredictedOrigin = spt_entprops.GetPlayerField<Vector>("m_vecPreviouslyPredictedOrigin");
+		m_vecPunchAngle = spt_entprops.GetPlayerField<QAngle>("m_Local.m_vecPunchAngle");
+		m_vecPunchAngleVel = spt_entprops.GetPlayerField<QAngle>("m_Local.m_vecPunchAngleVel");
+		m_vecViewOffset = spt_entprops.GetPlayerField<Vector>("m_vecViewOffset");
 		offServerAbsOrigin = m_vecAbsOrigin.field.serverOffset;
 
-		int m_bSinglePlayerGameEndingOffset = spt_entutils.GetPlayerOffset("m_bSinglePlayerGameEnding", true);
+		int m_bSinglePlayerGameEndingOffset = spt_entprops.GetPlayerOffset("m_bSinglePlayerGameEnding", true);
 		if (m_bSinglePlayerGameEndingOffset != utils::INVALID_DATAMAP_OFFSET)
 		{
 			// There's 2 chars between m_bSinglePlayerGameEnding and m_surfaceFriction and floats are 4 byte aligned
@@ -394,7 +396,7 @@ void PlayerIOFeature::GetPlayerFields()
 			m_surfaceFriction.field.serverOffset -= 4; // Take the previous 4 byte aligned address
 		}
 	}
-	fetched = true;
+	fetchedPlayerFields = true;
 }
 
 bool PlayerIOFeature::IsGroundEntitySet()
@@ -402,7 +404,7 @@ bool PlayerIOFeature::IsGroundEntitySet()
 	if (tas_strafe_version.GetInt() <= 4)
 	{
 		// This is bugged around portals, here for backwards compat
-		auto player = spt_entutils.GetPlayer(false);
+		auto player = spt_entprops.GetPlayer(false);
 		if (ORIG_GetGroundEntity == nullptr || !player)
 			return false;
 		else
@@ -413,7 +415,6 @@ bool PlayerIOFeature::IsGroundEntitySet()
 	else
 	{
 		// Not bugged around portals
-		const int INDEX_MASK = MAX_EDICTS - 1;
 		int index = m_hGroundEntity.GetValue() & INDEX_MASK;
 		return index != INDEX_MASK;
 	}
@@ -429,11 +430,15 @@ bool PlayerIOFeature::PlayerIOAddressesFound()
 {
 	GetPlayerFields();
 
-	return m_vecAbsVelocity.Found() && m_vecAbsOrigin.Found() && m_flMaxspeed.Found() && m_fFlags.Found()
-	       && m_vecPreviouslyPredictedOrigin.Found() && m_bDucking.Found() && m_flDuckJumpTime.Found()
-	       && m_surfaceFriction.Found() && m_hGroundEntity.Found() && ORIG_CreateMove && ORIG_GetButtonBits
-	       && _sv_airaccelerate && _sv_accelerate && _sv_friction && _sv_maxspeed && _sv_stopspeed
-	       && interfaces::engine_server != nullptr;
+	return
+#ifndef OE
+	    m_vecPreviouslyPredictedOrigin.Found() &&
+#endif
+	    m_vecAbsOrigin.Found() && m_flMaxspeed.Found() && m_fFlags.Found() && m_bDucking.Found()
+	    && m_vecAbsOrigin.Found() && m_flMaxspeed.Found() && m_fFlags.Found() && m_bDucking.Found()
+	    && m_flDuckJumpTime.Found() && m_hGroundEntity.Found() && ORIG_CreateMove && ORIG_GetButtonBits
+	    && _sv_airaccelerate && _sv_accelerate && _sv_friction && _sv_maxspeed && _sv_stopspeed
+	    && interfaces::engine_server != nullptr;
 }
 
 void PlayerIOFeature::GetMoveInput(float& forwardmove, float& sidemove)
@@ -497,25 +502,67 @@ void PlayerIOFeature::OnTick()
 	currentVelocity = GetPlayerVelocity();
 }
 
-#if defined(OE)
-static void DuckspamDown()
-#else
-static void DuckspamDown(const CCommand& args)
-#endif
-{
-	spt_playerio.EnableDuckspam();
-}
-static ConCommand DuckspamDown_Command("+y_spt_duckspam", DuckspamDown, "Enables the duckspam.");
+static const std::map<std::string, int> buttonCodeMap = {
+    {"attack", 1 << 0},
+    {"jump", 1 << 1},
+    {"duck", 1 << 2},
+    {"forward", 1 << 3},
+    {"back", 1 << 4},
+    {"use", 1 << 5},
+    {"left", 1 << 7},
+    {"right", 1 << 8},
+    {"moveleft", 1 << 9},
+    {"moveright", 1 << 10},
+    {"attack2", 1 << 11},
+    {"reload", 1 << 13},
+    {"speed", 1 << 17},
+    {"walk", 1 << 18},
+    {"zoom", 1 << 19},
+};
 
-#if defined(OE)
-static void DuckspamUp()
-#else
-static void DuckspamUp(const CCommand& args)
-#endif
+CON_COMMAND_DOWN(
+    y_spt_spam,
+    "Enables key spam.\n"
+    "Usage: +y_spt_spam <key>\n"
+    "keys: attack, jump, duck, forward, back, use, left, right, moveleft, moveright, attack2, reload, speed, walk, zoom")
 {
-	spt_playerio.DisableDuckspam();
+	if (args.ArgC() < 2)
+	{
+		Msg("Usage: +y_spt_spam <key>\n"
+		    "keys: attack, jump, duck, forward, back, use, left, right, moveleft, moveright, attack2, reload, speed, walk, zoom\n");
+		return;
+	}
+
+	auto buttonCodeIter = buttonCodeMap.find(args.Arg(1));
+	if (buttonCodeIter != buttonCodeMap.end())
+		spt_playerio.EnableSpam(buttonCodeIter->second);
+	else
+		Msg("Cannot find key <%s>\n", args.Arg(1));
 }
-static ConCommand DuckspamUp_Command("-y_spt_duckspam", DuckspamUp, "Disables the duckspam.");
+
+CON_COMMAND_UP(y_spt_spam, "Disables key spam.")
+{
+	if (args.ArgC() < 2)
+	{
+		// clear all spam keys
+		spt_playerio.DisableSpam(0xffffffff);
+		return;
+	}
+
+	auto buttonCodeIter = buttonCodeMap.find(args.Arg(1));
+	if (buttonCodeIter != buttonCodeMap.end())
+		spt_playerio.DisableSpam(buttonCodeIter->second);
+}
+
+CON_COMMAND_DOWN(y_spt_duckspam, "Enables the duckspam. (Outdated, use +y_spt_spam instead)")
+{
+	spt_playerio.EnableSpam(1 << 2); // IN_DUCK
+}
+
+CON_COMMAND_UP(y_spt_duckspam, "Disables the duckspam.")
+{
+	spt_playerio.DisableSpam(1 << 2); // IN_DUCK
+}
 
 CON_COMMAND(_y_spt_getvel, "Gets the last velocity of the player.")
 {
@@ -525,20 +572,22 @@ CON_COMMAND(_y_spt_getvel, "Gets the last velocity of the player.")
 	Warning("Velocity (xy): %f\n", vel.Length2D());
 }
 
-#if defined(SSDK2007) || defined(SSDK2013)
+#ifdef SPT_PORTAL_UTILS
 CON_COMMAND(y_spt_find_portals, "Prints info for all portals")
 {
+	bool found = false;
 	for (int i = 0; i < MAX_EDICTS; ++i)
 	{
 		auto ent = utils::GetClientEntity(i);
 		if (!invalidPortal(ent))
 		{
-			auto color = utils::GetProperty<bool>(i, "m_bIsPortal2") ? "orange" : "blue";
-			int remoteIdx = utils::GetProperty<int>(i, "m_hLinkedPortal");
-			bool activated = utils::GetProperty<bool>(i, "m_bActivated");
+			found = true;
+			auto color = spt_propertyGetter.GetProperty<bool>(i, "m_bIsPortal2") ? "orange" : "blue";
+			int remoteIdx = spt_propertyGetter.GetProperty<int>(i, "m_hLinkedPortal");
+			bool activated = spt_propertyGetter.GetProperty<bool>(i, "m_bActivated");
 			bool closed = (remoteIdx & INDEX_MASK) == INDEX_MASK;
 			auto openStr = closed ? (activated ? "a closed" : "an invisible") : "an open";
-			auto& origin = utils::GetPortalPosition(ent);
+			const auto& origin = utils::GetPortalPosition(ent);
 
 			Msg("SPT: There's %s %s portal with index %d at %.8f %.8f %.8f.\n",
 			    openStr,
@@ -549,126 +598,9 @@ CON_COMMAND(y_spt_find_portals, "Prints info for all portals")
 			    origin.z);
 		}
 	}
+	if (!found)
+		Msg("SPT: No portals!\n");
 }
-#endif
-
-#if SSDK2007
-// TODO: remove fixed offsets.
-
-void calculate_offset_player_pos(edict_t* saveglitch_portal, Vector& new_player_origin, QAngle& new_player_angles)
-{
-	// Here we make sure that the eye position and the eye angles match up.
-	const Vector view_offset(0, 0, 64);
-	auto& player_origin = *reinterpret_cast<Vector*>(reinterpret_cast<uintptr_t>(utils::GetServerPlayer())
-	                                                 + spt_playerio.offServerAbsOrigin);
-	auto& player_angles = *reinterpret_cast<QAngle*>(reinterpret_cast<uintptr_t>(utils::GetServerPlayer()) + 2568);
-
-	auto& matrix = *reinterpret_cast<VMatrix*>(reinterpret_cast<uintptr_t>(saveglitch_portal->GetUnknown()) + 1072);
-
-	auto eye_origin = player_origin + view_offset;
-	auto new_eye_origin = matrix * eye_origin;
-	new_player_origin = new_eye_origin - view_offset;
-
-	new_player_angles = TransformAnglesToWorldSpace(player_angles, matrix.As3x4());
-	new_player_angles.x = AngleNormalizePositive(new_player_angles.x);
-	new_player_angles.y = AngleNormalizePositive(new_player_angles.y);
-	new_player_angles.z = AngleNormalizePositive(new_player_angles.z);
-}
-
-CON_COMMAND(
-    y_spt_calc_relative_position,
-    "y_spt_calc_relative_position <index of the save glitch portal | \"blue\" | \"orange\"> [1 if you want to teleport there instead of just printing]")
-{
-	if (args.ArgC() != 2 && args.ArgC() != 3)
-	{
-		Msg("Usage: y_spt_calc_relative_position <index of the save glitch portal | \"blue\" | \"orange\"> [1 if you want to teleport there instead of just printing]\n");
-		return;
-	}
-
-	int portal_index = atoi(args.Arg(1));
-
-	if (!strcmp(args.Arg(1), "blue") || !strcmp(args.Arg(1), "orange"))
-	{
-		std::vector<int> indices;
-
-		for (int i = 0; i < MAX_EDICTS; ++i)
-		{
-			auto ent = interfaces::engine_server->PEntityOfEntIndex(i);
-
-			if (ent && !ent->IsFree() && !strcmp(ent->GetClassName(), "prop_portal"))
-			{
-				auto is_orange_portal =
-				    *reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(ent->GetUnknown()) + 1137);
-
-				if (is_orange_portal == (args.Arg(1)[0] == 'o'))
-					indices.push_back(i);
-			}
-		}
-
-		if (indices.size() > 1)
-		{
-			Msg("There are multiple %s portals, please use the index:\n", args.Arg(1));
-
-			for (auto i : indices)
-			{
-				auto ent = interfaces::engine_server->PEntityOfEntIndex(i);
-				auto& origin = *reinterpret_cast<Vector*>(reinterpret_cast<uintptr_t>(ent->GetUnknown())
-				                                          + spt_playerio.offServerAbsOrigin);
-
-				Msg("%d located at %.8f %.8f %.8f\n", i, origin.x, origin.y, origin.z);
-			}
-
-			return;
-		}
-		else if (indices.size() == 0)
-		{
-			Msg("There are no %s portals.\n", args.Arg(1));
-			return;
-		}
-		else
-		{
-			portal_index = indices[0];
-		}
-	}
-
-	auto portal = interfaces::engine_server->PEntityOfEntIndex(portal_index);
-	if (!portal || portal->IsFree() || strcmp(portal->GetClassName(), "prop_portal") != 0)
-	{
-		Warning("The portal index is invalid.\n");
-		return;
-	}
-
-	Vector new_player_origin;
-	QAngle new_player_angles;
-	calculate_offset_player_pos(portal, new_player_origin, new_player_angles);
-
-	if (args.ArgC() == 2)
-	{
-		Msg("setpos %.8f %.8f %.8f;setang %.8f %.8f %.8f\n",
-		    new_player_origin.x,
-		    new_player_origin.y,
-		    new_player_origin.z,
-		    new_player_angles.x,
-		    new_player_angles.y,
-		    new_player_angles.z);
-	}
-	else
-	{
-		char buf[256];
-		snprintf(buf,
-		         ARRAYSIZE(buf),
-		         "setpos %.8f %.8f %.8f;setang %.8f %.8f %.8f\n",
-		         new_player_origin.x,
-		         new_player_origin.y,
-		         new_player_origin.z,
-		         new_player_angles.x,
-		         new_player_angles.y,
-		         new_player_angles.z);
-
-		interfaces::engine->ClientCmd(buf);
-	}
-}
-
 #endif
 
 CON_COMMAND(tas_print_movement_vars, "Prints movement vars.")
@@ -754,7 +686,7 @@ const wchar* MOVETYPE_FLAGS[] = {L"MOVETYPE_NONE",
 const wchar* MOVECOLLIDE_FLAGS[] = {L"MOVECOLLIDE_DEFAULT",
                                     L"MOVECOLLIDE_FLY_BOUNCE",
                                     L"MOVECOLLIDE_FLY_CUSTOM",
-                                    L"MOVECOLLIDE_COUNT"};
+                                    L"MOVECOLLIDE_FLY_SLIDE"};
 
 const wchar* COLLISION_GROUPS[] = {L"COLLISION_GROUP_NONE",
                                    L"COLLISION_GROUP_DEBRIS",
@@ -793,14 +725,15 @@ const wchar* COLLISION_GROUPS[] = {L"COLLISION_GROUP_NONE",
 		             fontTall); \
 	}
 
-#if defined(SSDK2007)
-void DrawFlagsHud(bool mutuallyExclusiveFlags, const wchar* hudName, const wchar** nameArray, int count, int flags)
+#ifdef SPT_HUD_ENABLED
+void DrawFlagsHud(bool mutuallyExclusiveFlags, const wchar* hudName, const wchar** nameArray, uint count, uint flags)
 {
-	for (int u = 0; u < count; ++u)
+	uint mask = (1 << count) - 1;
+	for (uint u = 0; u < count; ++u)
 	{
 		if (nameArray[u])
 		{
-			if (mutuallyExclusiveFlags && flags == u)
+			if (mutuallyExclusiveFlags && (flags & mask) == u)
 			{
 				spt_hud.DrawTopHudElement(L"%s: %s", hudName, nameArray[u]);
 			}
@@ -819,6 +752,10 @@ void PlayerIOFeature::LoadFeature()
 	{
 		sizeofCUserCmd = 64; // Is missing a CUtlVector
 	}
+	else if (utils::DoesGameLookLikeDMoMM())
+	{
+		sizeofCUserCmd = 188;
+	}
 	else
 	{
 		sizeofCUserCmd = 84;
@@ -835,7 +772,7 @@ void PlayerIOFeature::LoadFeature()
 	{
 		InitCommand(tas_print_movement_vars);
 
-#if defined(SSDK2007)
+#ifdef SPT_HUD_ENABLED
 		AddHudCallback(
 		    "accelerate",
 		    [this]()
@@ -858,7 +795,7 @@ void PlayerIOFeature::LoadFeature()
 	if (m_vecAbsVelocity.Found())
 	{
 		InitCommand(_y_spt_getvel);
-#if defined(SSDK2007)
+#ifdef SPT_HUD_ENABLED
 		if (TickSignal.Works)
 		{
 			TickSignal.Connect(this, &PlayerIOFeature::OnTick);
@@ -898,6 +835,7 @@ void PlayerIOFeature::LoadFeature()
 		    },
 		    y_spt_hud_velocity_angles);
 
+#ifdef SPT_PORTAL_UTILS
 		if (utils::DoesGameLookLikePortal())
 		{
 			AddHudCallback(
@@ -912,27 +850,25 @@ void PlayerIOFeature::LoadFeature()
 			    y_spt_hud_ag_sg_tester);
 		}
 #endif
+#endif
 	}
 
 	if (ORIG_GetButtonBits)
 	{
-		InitConcommandBase(DuckspamUp_Command);
-		InitConcommandBase(DuckspamDown_Command);
+		InitConcommandBase(y_spt_spam_down_command);
+		InitConcommandBase(y_spt_spam_up_command);
+		InitConcommandBase(y_spt_duckspam_down_command);
+		InitConcommandBase(y_spt_duckspam_up_command);
 	}
 
-#ifdef SSDK2007
-	if (interfaces::engine_server && interfaces::engine && utils::DoesGameLookLikePortal()
-	    && m_vecAbsOrigin.Found()) // 5135 only
-	{
-		InitCommand(y_spt_calc_relative_position);
-	}
-#endif
-#if defined(SSDK2007)
+#ifdef SPT_HUD_ENABLED
+#ifdef SPT_PORTAL_UTILS
 	if (utils::DoesGameLookLikePortal() && interfaces::engine_server
 	    && offServerAbsOrigin != utils::INVALID_DATAMAP_OFFSET)
 	{
 		InitCommand(y_spt_find_portals);
 	}
+#endif
 
 	if (m_fFlags.Found())
 	{

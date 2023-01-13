@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "stdafx.hpp"
 #include "tester.hpp"
 #include <filesystem>
 #include "..\spt-serverplugin.hpp"
@@ -221,21 +221,21 @@ namespace scripts
 		}
 	}
 
-	void Tester::RunAutomatedTest(const std::string& folder, bool generating, const std::string& testFileName)
+	void Tester::RunAutomatedTest(const std::string& folder, bool generating, const std::string& fileName)
 	{
-		OpenLogFile(testFileName);
+		OpenLogFile(fileName);
 		LoadTest(folder, generating, true);
 	}
 
-	void Tester::RunAllTests(const std::string& folder, bool generating, bool automatedTest)
+	void Tester::RunAllTests(const std::string& folder, bool generating, bool automated)
 	{
-		this->automatedTest = automatedTest;
+		this->automatedTest = automated;
 		Reset();
 
 		for (auto& entry : std::filesystem::recursive_directory_iterator(folder))
 		{
 			auto& path = entry.path();
-			auto& str = path.string().substr(GetGameDir().length() + 1);
+			auto str = path.string().substr(GetGameDir().length() + 1);
 			int extPos = str.find(SCRIPT_EXT);
 
 			if (extPos != -1)
@@ -296,9 +296,9 @@ namespace scripts
 			Msg("[TEST] %s : %s\n", testName.c_str(), msg);
 		}
 	}
-	void Tester::OpenLogFile(const std::string& testFileName)
+	void Tester::OpenLogFile(const std::string& fileName)
 	{
-		logFileStream.open(testFileName);
+		logFileStream.open(fileName);
 	}
 	void Tester::CloseLogFile()
 	{

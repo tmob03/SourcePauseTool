@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "stdafx.hpp"
 #include "tracing.hpp"
 #include "ent_utils.hpp"
 #include "game_detection.hpp"
@@ -10,6 +10,10 @@
 #include "string_utils.hpp"
 #include "..\sptlib-wrapper.hpp"
 #include "..\strafe\strafestuff.hpp"
+#include "portal_utils.hpp"
+
+#undef min
+#undef max
 
 ConVar y_spt_hud_oob("y_spt_hud_oob", "0", FCVAR_CHEAT, "Is the player OoB?");
 
@@ -22,7 +26,9 @@ namespace patterns
 	    "5135",
 	    "8B 44 24 10 8B 4C 24 0C 83 EC 10 56 6A 00 50 51 8D 4C 24 10 E8 ?? ?? ?? ?? 8B 74 24 28 8B 0D ?? ?? ?? ?? 8B 11 8B 52 10",
 	    "3420",
-	    "8B 44 24 10 8B 4C 24 0C 83 EC 0C 56 50 51 8D 4C 24 0C E8 ?? ?? ?? ?? 8B 74 24 24 8B 0D ?? ?? ?? ?? 8B 11 8B 52 10");
+	    "8B 44 24 10 8B 4C 24 0C 83 EC 0C 56 50 51 8D 4C 24 0C E8 ?? ?? ?? ?? 8B 74 24 24 8B 0D ?? ?? ?? ?? 8B 11 8B 52 10",
+	    "7462488",
+	    "55 8B EC 83 EC 10 8D 4D ?? 56 FF 75 ?? FF 75 ??");
 	PATTERNS(CGameMovement__TracePlayerBBox, "5135", "55 8B EC 83 E4 F0 83 EC 5C 56 8B F1 8B 06 8B 50 24");
 	PATTERNS(CPortalGameMovement__TracePlayerBBox,
 	         "5135",
@@ -41,10 +47,16 @@ namespace patterns
 	    CGameMovement__GetPlayerMaxs,
 	    "4104",
 	    "8B 41 ?? 8B 88 ?? ?? ?? ?? C1 E9 03 F6 C1 01 8B 0D ?? ?? ?? ?? 8B 11 74 09 8B 42 ?? FF D0 83 C0 54 C3");
-	PATTERNS(
-	    CEngineTrace__PointOutsideWorld,
-	    "5135",
-	    "8B 44 24 04 50 E8 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? C1 E0 04 83 C4 04 66 83 7C 08 04 FF 0F 94 C0 C2 04 00");
+	PATTERNS(GetActiveWeapon,
+	         "5135",
+	         "8B 81 d8 07 00 00 83 F8 FF 74 ?? 8B 15 ?? ?? ?? ?? 8B C8",
+	         "7197370",
+	         "8B 91 10 08 00 00 83 FA FF 74 ?? A1 ?? ?? ?? ?? 8B CA 81 E1 FF 0F 00 00");
+	PATTERNS(TraceFirePortal,
+	         "5135",
+	         "55 8B EC 83 E4 F0 B8 C4 11 00 00 E8 ?? ?? ?? ?? 53 56 57",
+	         "7197370",
+	         "53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B ?? 89 6C 24 ?? 8B EC B8 C8 11 00 00");
 
 } // namespace patterns
 
@@ -57,14 +69,12 @@ void Tracing::InitHooks()
 	FIND_PATTERN(server, TracePlayerBBoxForGround2);
 	HOOK_FUNCTION(server, CGameMovement__GetPlayerMaxs);
 	HOOK_FUNCTION(server, CGameMovement__GetPlayerMins);
-#ifdef SSDK2007
-	if (utils::DoesGameLookLikePortal() && utils::GetBuildNumber() == 5135)
+#ifdef SPT_TRACE_PORTAL_ENABLED
+	if (utils::DoesGameLookLikePortal())
 	{
-		// TODO botched and BAD!! fix for other versions!
-		AddOffsetHook("server", 0xCCE90, "GetActiveWeapon", reinterpret_cast<void**>(&ORIG_GetActiveWeapon));
-		AddOffsetHook("server", 0x441730, "TraceFirePortal", reinterpret_cast<void**>(&ORIG_TraceFirePortal));
+		FIND_PATTERN(server, GetActiveWeapon);
+		FIND_PATTERN(server, TraceFirePortal);
 	}
-	FIND_PATTERN(engine, CEngineTrace__PointOutsideWorld);
 #endif
 }
 
@@ -114,10 +124,20 @@ void Tracing::TracePlayerBBox(const Vector& start,
 	overrideMinMax = false;
 }
 
+#ifdef SPT_TRACE_PORTAL_ENABLED
+
+void* Tracing::GetActiveWeapon()
+{
+	auto player = utils::GetServerPlayer();
+	if (!player)
+		return nullptr;
+
+	return ORIG_GetActiveWeapon(player);
+}
+
 float Tracing::TraceFirePortal(trace_t& tr, const Vector& startPos, const Vector& vDirection)
 {
-	auto weapon = ORIG_GetActiveWeapon(utils::GetServerPlayer());
-
+	auto weapon = GetActiveWeapon();
 	if (!weapon)
 	{
 		tr.fraction = 1.0f;
@@ -131,6 +151,46 @@ float Tracing::TraceFirePortal(trace_t& tr, const Vector& startPos, const Vector
 	return ORIG_TraceFirePortal(
 	    weapon, 0, false, startPos, vDirection, tr, vFinalPosition, qFinalAngles, PORTAL_PLACED_BY_PLAYER, true);
 }
+
+float Tracing::TraceTransformFirePortal(trace_t& tr, const Vector& startPos, const QAngle& startAngles)
+{
+	Vector finalPos;
+	QAngle finalAngles;
+	return TraceTransformFirePortal(tr, startPos, startAngles, finalPos, finalAngles, false);
+}
+
+float Tracing::TraceTransformFirePortal(trace_t& tr,
+                                        const Vector& startPos,
+                                        const QAngle& startAngles,
+                                        Vector& finalPos,
+                                        QAngle& finalAngles,
+                                        bool isPortal2)
+{
+	auto weapon = GetActiveWeapon();
+	if (!weapon)
+	{
+		tr.fraction = 1.0f;
+		return 0;
+	}
+
+	// Transform through portal
+	Vector transformedPos = startPos;
+	QAngle transformedAngles = startAngles;
+	Vector vDirection;
+	IClientEntity* env = GetEnvironmentPortal();
+	if (env)
+	{
+		transformThroghPortal(env, startPos, startAngles, transformedPos, transformedAngles);
+	}
+	AngleVectors(transformedAngles, &vDirection);
+
+	const int PORTAL_PLACED_BY_PLAYER = 2;
+
+	return ORIG_TraceFirePortal(
+	    weapon, 0, isPortal2, transformedPos, vDirection, tr, finalPos, finalAngles, PORTAL_PLACED_BY_PLAYER, true);
+}
+
+#endif
 
 bool Tracing::ShouldLoadFeature()
 {
@@ -163,13 +223,11 @@ const Vector& __fastcall Tracing::HOOKED_CGameMovement__GetPlayerMins(void* this
 		return spt_tracing.ORIG_CGameMovement__GetPlayerMins(thisptr, edx);
 }
 
-#ifdef SSDK2007
+#ifdef SPT_TRACE_PORTAL_ENABLED
 double trace_fire_portal(QAngle angles, Vector& normal)
 {
-	Vector fwd;
-	AngleVectors(angles, &fwd);
 	trace_t tr;
-	spt_tracing.TraceFirePortal(tr, spt_generic.GetCameraOrigin(), fwd);
+	spt_tracing.TraceTransformFirePortal(tr, utils::GetPlayerEyePosition(), angles);
 
 	if (tr.DidHit())
 	{
@@ -180,12 +238,26 @@ double trace_fire_portal(QAngle angles, Vector& normal)
 }
 
 static QAngle firstAngle;
+static Vector firstPos;
 static bool firstInvocation = true;
 
 CON_COMMAND(
     y_spt_find_seam_shot,
     "y_spt_find_seam_shot [<pitch1> <yaw1> <pitch2> <yaw2> <epsilon>] - tries to find a seam shot on a \"line\" between viewangles (pitch1; yaw1) and (pitch2; yaw2) with binary search. Decreasing epsilon will result in more viewangles checked. A default value is 0.00001. If no arguments are given, first invocation selects the first point, second invocation selects the second point and searches between them.")
 {
+	auto player = utils::GetServerPlayer();
+	if (!player)
+	{
+		Msg("Cannot find server player.\n");
+		return;
+	}
+
+	if (!spt_tracing.ORIG_GetActiveWeapon(player))
+	{
+		Msg("You need to be holding a portal gun.\n");
+		return;
+	}
+
 	QAngle a, b;
 	double eps = 0.00001 * 0.00001;
 
@@ -194,6 +266,7 @@ CON_COMMAND(
 		if (firstInvocation)
 		{
 			interfaces::engine->GetViewAngles(firstAngle);
+			firstPos = utils::GetPlayerEyePosition();
 			firstInvocation = !firstInvocation;
 
 			Msg("First point set.\n");
@@ -202,7 +275,11 @@ CON_COMMAND(
 		else
 		{
 			firstInvocation = !firstInvocation;
-
+			if (firstPos != utils::GetPlayerEyePosition())
+			{
+				Msg("Don't move when finding seamshot!\n");
+				return;
+			}
 			a = firstAngle;
 			interfaces::engine->GetViewAngles(b);
 		}
@@ -220,14 +297,8 @@ CON_COMMAND(
 		eps = (args.ArgC() == 5) ? eps : std::pow(atof(args.Arg(5)), 2);
 	}
 
-	if (!spt_tracing.ORIG_GetActiveWeapon(utils::GetServerPlayer()))
-	{
-		Msg("You need to be holding a portal gun.\n");
-		return;
-	}
-
-	Vector a_normal;
-	const auto distance = std::max(trace_fire_portal(a, a_normal), trace_fire_portal(b, Vector()));
+	Vector a_normal, b_normal;
+	const auto distance = std::max(trace_fire_portal(a, a_normal), trace_fire_portal(b, b_normal));
 
 	// If our trace had a distance greater than the a or b distance by this amount, treat it as a seam shot.
 	constexpr double GOOD_DISTANCE_DIFFERENCE = 50.0 * 50.0;
@@ -276,16 +347,15 @@ void Tracing::LoadFeature()
 	if (!CanTracePlayerBBox())
 		Warning("tas_strafe_version 2 not available\n");
 
-#ifdef SSDK2007
-	if (utils::DoesGameLookLikePortal())
+#ifdef SPT_TRACE_PORTAL_ENABLED
+	if (utils::DoesGameLookLikePortal() && ORIG_TraceFirePortal)
 	{
-		InitCommand(
-		    y_spt_find_seam_shot); // 5135 only but version detection doesnt properly exist, so cba to fix this
+		InitCommand(y_spt_find_seam_shot);
 	}
 #endif
 
-#if defined(SSDK2007)
-	if (ORIG_CEngineTrace__PointOutsideWorld)
+#ifdef SPT_HUD_ENABLED
+	if (interfaces::engineTraceClient)
 	{
 		AddHudCallback(
 		    "oob",
@@ -294,7 +364,7 @@ void Tracing::LoadFeature()
 			    Vector v = spt_generic.GetCameraOrigin();
 			    trace_t tr;
 			    Strafe::Trace(tr, v, v + Vector(1, 1, 1));
-			    int oob = spt_tracing.ORIG_CEngineTrace__PointOutsideWorld(nullptr, 0, v) && !tr.startsolid;
+			    int oob = interfaces::engineTraceClient->PointOutsideWorld(v) && !tr.startsolid;
 			    spt_hud.DrawTopHudElement(L"oob: %d", oob);
 		    },
 		    y_spt_hud_oob);

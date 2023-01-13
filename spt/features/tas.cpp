@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "stdafx.hpp"
 #include "tas.hpp"
 #include "..\cvars.hpp"
 #include "command.hpp"
@@ -100,7 +100,7 @@ ConVar tas_force_onground(
     FCVAR_TAS_RESET,
     "If enabled, strafing assumes the player is on ground regardless of what the prediction indicates. Useful for save glitch in Portal where the prediction always reports the player being in the air.\n");
 ConVar tas_strafe_version("tas_strafe_version",
-                          "5",
+                          "6",
                           FCVAR_TAS_RESET,
                           "Strafe version. For backwards compatibility with old scripts.");
 
@@ -311,7 +311,7 @@ void TASFeature::LoadFeature()
 		InitConcommandBase(tas_script_onsuccess);
 
 		AfterFramesSignal.Connect(&scripts::g_TASReader, &scripts::SourceTASReader::OnAfterFrames);
-#if defined(SSDK2007)
+#ifdef SPT_HUD_ENABLED
 		AddHudCallback(
 		    "frame",
 		    [this]()

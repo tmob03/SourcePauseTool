@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "stdafx.hpp"
 
 #include "generic.hpp"
 #include "aim.hpp"
@@ -102,13 +102,15 @@ namespace patterns
 	         "3420",
 	         "81 EC 54 05 00 00 53 55 8B E9 80 7D ?? 00 BB 01 00 00 00",
 	         "hl1movement",
-	         "55 8B EC 81 EC 5C 05 00 00 56 8B F1 89 75 E8");
+	         "55 8B EC 81 EC 5C 05 00 00 56 8B F1 89 75 E8",
+	         "dmomm",
+	         "83 EC 0C 56 8B F1 80 BE ?? ?? ?? ?? 00 57 8B 7C 24 1C 75 ?? 80 7E ?? 00");
 	PATTERNS(
 	    CHudDamageIndicator__GetDamagePosition,
 	    "5135",
 	    "83 EC 18 E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 08 89 4C 24 0C 8B 50 04 6A 00 89 54 24 14 8B 40 08 6A 00 8D 4C 24 08 51 8D 54 24 18 52 89 44 24 24",
 	    "1910503",
-	    "55 8B EC 83 EC 18 56 8B F1 E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? F3 0F 7E 00 6A 00 6A 00 8D 4D F4 66 0F D6 45 E8");
+	    "55 8B EC 83 EC ?? 56 8B F1 E8 ?? ?? ?? ?? E8 ?? ?? ?? ??");
 	PATTERNS(SV_Frame,
 	         "5135",
 	         "8B 0D ?? ?? ?? ?? 83 EC 08 85 C9 74 10 8B 44 24 0C 84 C0 74 08 8B 11 50 8B 42 78 FF D0 83 3D");
@@ -161,12 +163,12 @@ void GenericFeature::LoadFeature()
 		int ptnNumber = GetPatternIndex((void**)&ORIG_CHudDamageIndicator__GetDamagePosition);
 		switch (ptnNumber)
 		{
-		case 0:
+		case 0: // 5135
 			ORIG_MainViewOrigin =
 			    (_MainViewOrigin)(*reinterpret_cast<int*>(ORIG_CHudDamageIndicator__GetDamagePosition + 4)
 			                      + ORIG_CHudDamageIndicator__GetDamagePosition + 8);
 			break;
-		case 1:
+		case 1: // 1910503
 			ORIG_MainViewOrigin =
 			    (_MainViewOrigin)(*reinterpret_cast<int*>(ORIG_CHudDamageIndicator__GetDamagePosition + 10)
 			                      + ORIG_CHudDamageIndicator__GetDamagePosition + 14);

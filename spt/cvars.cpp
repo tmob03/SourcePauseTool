@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "stdafx.hpp"
 #include "cvars.hpp"
 #include "feature.hpp"
 #include "interfaces.hpp"
@@ -71,9 +71,9 @@ void Cvar_UnregisterSPTCvars()
 
 	interfaces::g_pCVar->UnlinkVariables(FCVAR_PLUGIN);
 
-	for (ConCommandBase* command : commandsToAdd)
+	for (ConCommandBase* concmd : commandsToAdd)
 	{
-		interfaces::g_pCVar->RegisterConCommandBase(command);
+		interfaces::g_pCVar->RegisterConCommandBase(concmd);
 	}
 
 	cmd_to_feature.clear();

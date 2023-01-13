@@ -1,12 +1,12 @@
-#include "stdafx.h"
+#include "stdafx.hpp"
 
 #include "condition2.hpp"
 
-#include "..\overlay\portal_camera.hpp"
+#include "spt\utils\portal_utils.hpp"
 
 #include "ent_utils.hpp"
 #include "math.hpp"
-#include "property_getter.hpp"
+#include "..\features\property_getter.hpp"
 #include "..\features\playerio.hpp"
 
 namespace scripts2
@@ -104,12 +104,12 @@ namespace scripts2
 
 	bool AliveCondition::IsTrue(int tick, int totalTicks) const
 	{
-		return !utils::playerEntityAvailable() || utils::GetProperty<int>(0, "m_iHealth") > 0;
+		return !utils::playerEntityAvailable() || spt_propertyGetter.GetProperty<int>(0, "m_iHealth") > 0;
 	}
 
 	bool AliveCondition::ShouldTerminate(int tick, int totalTicks) const
 	{
-		return utils::playerEntityAvailable() && utils::GetProperty<int>(0, "m_iHealth") <= 0;
+		return utils::playerEntityAvailable() && spt_propertyGetter.GetProperty<int>(0, "m_iHealth") <= 0;
 	}
 
 	LoadCondition::LoadCondition() {}
@@ -166,4 +166,4 @@ namespace scripts2
 		return false;
 	}
 #endif
-} // namespace scripts
+} // namespace scripts2

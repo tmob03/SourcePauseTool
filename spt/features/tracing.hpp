@@ -1,6 +1,10 @@
 #pragma once
 #include "..\feature.hpp"
 
+#if defined(SSDK2013) || defined(SSDK2007)
+#define SPT_TRACE_PORTAL_ENABLED
+#endif
+
 #if defined(OE)
 #include "vector.h"
 #else
@@ -58,7 +62,6 @@ typedef float(__fastcall* _TraceFirePortal)(void* thisptr,
 typedef void*(__fastcall* _GetActiveWeapon)(void* thisptr);
 typedef const Vector&(__fastcall* _CGameMovement__GetPlayerMaxs)(void* thisptr, int edx);
 typedef const Vector&(__fastcall* _CGameMovement__GetPlayerMins)(void* thisptr, int edx);
-typedef bool(__fastcall* _CEngineTrace__PointOutsideWorld)(void* thisptr, int edx, const Vector& pt);
 
 // Tracing related functionality
 class Tracing : public FeatureWrapper<Tracing>
@@ -68,7 +71,6 @@ public:
 	_TracePlayerBBoxForGround ORIG_TracePlayerBBoxForGround = nullptr;
 	_TracePlayerBBoxForGround2 ORIG_TracePlayerBBoxForGround2 = nullptr;
 	_GetActiveWeapon ORIG_GetActiveWeapon = nullptr;
-	_CEngineTrace__PointOutsideWorld ORIG_CEngineTrace__PointOutsideWorld = nullptr;
 	_TraceFirePortal ORIG_TraceFirePortal = nullptr;
 
 	bool TraceClientRay(const Ray_t& ray,
@@ -84,7 +86,20 @@ public:
 	                     unsigned int fMask,
 	                     int collisionGroup,
 	                     trace_t& pm);
+
+#ifdef SPT_TRACE_PORTAL_ENABLED
+	void* GetActiveWeapon();
 	float TraceFirePortal(trace_t& tr, const Vector& startPos, const Vector& vDirection);
+
+	// Transform through portal if in portal enviroment
+	float TraceTransformFirePortal(trace_t& tr, const Vector& startPos, const QAngle& startAngles);
+	float TraceTransformFirePortal(trace_t& tr,
+	                               const Vector& startPos,
+	                               const QAngle& startAngles,
+	                               Vector& finalPos,
+	                               QAngle& finalAngles,
+	                               bool isPortal2);
+#endif
 
 protected:
 	virtual bool ShouldLoadFeature() override;

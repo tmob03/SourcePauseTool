@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "stdafx.hpp"
 #include "..\spt-serverplugin.hpp"
 #include "SPTLib\sptlib.hpp"
 #include "SPTLib\MemUtils.hpp"
@@ -86,6 +86,19 @@ namespace utils
 		return false;
 	}
 
+	bool DoesGameLookLikeEstranged()
+	{
+#ifndef OE
+		if (interfaces::engine)
+		{
+			auto game_dir = interfaces::engine->GetGameDirectory();
+			return (GetFileName(Convert(game_dir)) == L"estrangedact1");
+		}
+#endif
+
+		return false;
+	}
+
 	static std::future<int> BuildResult;
 
 	int GetBuildNumber()
@@ -102,13 +115,9 @@ namespace utils
 		return BuildNumber;
 	}
 
-	static int MluggConvertToBuildNumberCode(int match, uint8_t* moduleStart)
+	int DateToBuildNumber(const char* date_str)
 	{
-		const char* wholeString = reinterpret_cast<const char*>(moduleStart) + match;
-		DevMsg("Found date string: %s\n", wholeString);
-		const char* date_str = wholeString + 20;
-
-		char* months[] = {
+		const char* months[] = {
 		    "Jan",
 		    "Feb",
 		    "Mar",
@@ -170,7 +179,6 @@ namespace utils
 		if (y % 4 == 0 && m > 1)
 			build_num += 1;
 		build_num -= 35739;
-
 		return build_num;
 	}
 
@@ -193,15 +201,19 @@ namespace utils
 			                                &moduleSize))
 			    {
 				    moduleEnd = moduleStart + moduleSize;
-				    char* BUILD_STRING = "Exe build:";
-				    uint8_t* beginNeedle = reinterpret_cast<uint8_t*>(BUILD_STRING);
-				    uint8_t* endNeedle = beginNeedle + strlen(BUILD_STRING);
+				    const char* BUILD_STRING = "Exe build:";
+				    const uint8_t* beginNeedle = reinterpret_cast<const uint8_t*>(BUILD_STRING);
+				    const uint8_t* endNeedle = beginNeedle + strlen(BUILD_STRING);
 
 				    int match = kmp::match_first(beginNeedle, endNeedle, moduleStart, moduleEnd);
 
 				    if (match >= 0)
 				    {
-					    build_num = MluggConvertToBuildNumberCode(match, moduleStart);
+					    const char* wholeString =
+					        reinterpret_cast<const char*>(moduleStart) + match;
+					    DevMsg("Found date string: %s\n", wholeString);
+					    const char* date_str = wholeString + 20;
+					    build_num = DateToBuildNumber(date_str);
 				    }
 				    else
 				    {

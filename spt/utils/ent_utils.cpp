@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "stdafx.hpp"
 
 #include "ent_utils.hpp"
 
@@ -8,13 +8,13 @@
 #include <vector>
 
 #include "..\cvars.hpp"
-#include "..\overlay\portal_camera.hpp"
+#include "spt\utils\portal_utils.hpp"
 #include "..\sptlib-wrapper.hpp"
 #include "..\strafe\strafestuff.hpp"
 #include "SPTLib\sptlib.hpp"
 #include "client_class.h"
 #include "game_detection.hpp"
-#include "property_getter.hpp"
+#include "..\features\property_getter.hpp"
 #include "string_utils.hpp"
 #include "math.hpp"
 #include "game_detection.hpp"
@@ -33,7 +33,6 @@
 
 namespace utils
 {
-#ifndef OE
 	IClientEntity* GetClientEntity(int index)
 	{
 		return interfaces::entList->GetClientEntity(index + 1);
@@ -52,6 +51,8 @@ namespace utils
 			}
 		}
 	}
+
+#ifdef SPT_PORTAL_UTILS
 
 	void PrintAllPortals()
 	{
@@ -76,6 +77,8 @@ namespace utils
 			}
 		}
 	}
+
+#endif
 
 	IClientEntity* GetPlayer()
 	{
@@ -231,29 +234,19 @@ namespace utils
 
 	Vector GetPlayerEyePosition()
 	{
-		auto ply = GetPlayer();
-
-		if (ply)
-		{
-			auto offset = utils::GetProperty<Vector>(0, "m_vecViewOffset[0]");
-
-			return ply->GetAbsOrigin() + offset;
-		}
-		else
-			return Vector();
+		return spt_playerio.m_vecAbsOrigin.GetValue() + spt_playerio.m_vecViewOffset.GetValue();
 	}
 
 	QAngle GetPlayerEyeAngles()
 	{
-		if (DoesGameLookLikePortal())
-			return utils::GetProperty<QAngle>(0, "m_angEyeAngles[0]");
-		else
-			return utils::GetProperty<QAngle>(0, "m_angRotation");
+		float va[3];
+		EngineGetViewAngles(va);
+		return QAngle(va[0], va[1], va[2]);
 	}
 
 	int PortalIsOrange(IClientEntity* ent)
 	{
-		return utils::GetProperty<int>(ent->entindex() - 1, "m_bIsPortal2");
+		return spt_propertyGetter.GetProperty<int>(ent->entindex() - 1, "m_bIsPortal2");
 	}
 
 	static IClientEntity* prevPortal = nullptr;
@@ -261,7 +254,7 @@ namespace utils
 
 	IClientEntity* FindLinkedPortal(IClientEntity* ent)
 	{
-		int ehandle = utils::GetProperty<int>(ent->entindex() - 1, "m_hLinkedPortal");
+		int ehandle = spt_propertyGetter.GetProperty<int>(ent->entindex() - 1, "m_hLinkedPortal");
 		int index = ehandle & INDEX_MASK;
 
 		// Backup linking thing for fizzled portals(not sure if you can actually properly figure it out using client portals only)
@@ -344,7 +337,7 @@ namespace utils
 			else // error occurred
 			{
 				i = argSize;
-				arr = L"error occurred in parsing";
+				arr = (wchar_t*)L"error occurred in parsing";
 				entries = 1;
 				break;
 			}
@@ -450,7 +443,6 @@ namespace utils
 			return INVALID_OFFSET;
 		}
 	}
-#endif
 
 	IServerUnknown* GetServerPlayer()
 	{
@@ -514,11 +506,7 @@ namespace utils
 
 	bool playerEntityAvailable()
 	{
-#ifdef OE
-		return false;
-#else
 		return GetClientEntity(0) != nullptr;
-#endif
 	}
 
 	static CBaseEntity* GetServerEntity(int index)

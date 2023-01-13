@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "stdafx.hpp"
 
 #include "shadow.hpp"
 #include "..\utils\game_detection.hpp"
@@ -29,12 +29,18 @@ namespace patterns
 	PATTERNS(
 	    GetShadowPosition,
 	    "5135",
-	    "81 EC ?? ?? ?? ?? 8B 41 ?? 8B 40 ?? 8B 40",
+	    "81 EC ?? ?? ?? ?? 8B 41 ?? 8B 40 ?? 8B 40 18 8B 90 20 01 00 00 8B 80 24 01 00 00 89 14 24",
 	    "5377866",
 	    "55 8B EC 81 EC ?? ?? ?? ?? 8B 41 08 8B 40 08 8B 50",
 	    "BMS-Retail",
-	    "55 8B EC 81 EC ?? ?? ?? ?? A1 ?? ?? ?? ?? 33 C5 89 45 FC 8B 41 ?? 56 8B 75 ?? 57 8B 40 ?? 8B 7D ?? 8B 50");
-	PATTERNS(beam_object_to_new_position, "5135", "81 EC D8 00 00 00 53 8B D9 F7 43 78 00 0C 00 00");
+	    "55 8B EC 81 EC ?? ?? ?? ?? A1 ?? ?? ?? ?? 33 C5 89 45 FC 8B 41 ?? 56 8B 75 ?? 57 8B 40 ?? 8B 7D ?? 8B 50",
+	    "estranged",
+	    "55 8B EC 81 EC ?? ?? ?? ?? 8B 41 08 8B 40 08 8B 40 18 8B 90 20 01 00 00 8B 80 24 01 00 00 89 55 F8");
+	PATTERNS(beam_object_to_new_position,
+	         "5135",
+	         "81 EC D8 00 00 00 53 8B D9 F7 43 78 00 0C 00 00 8B 83 ?? ?? ?? ?? 55",
+	         "BMS-Retail",
+	         "55 8B EC 81 EC E4 00 00 00 A1 ?? ?? ?? ?? 33 C5 89 45 ?? 8B 55 ??");
 } // namespace patterns
 
 void ShadowPosition::InitHooks()
@@ -66,7 +72,7 @@ void ShadowPosition::LoadFeature()
 {
 	if (ORIG_GetShadowPosition)
 	{
-#ifdef SSDK2007
+#ifdef SPT_HUD_ENABLED
 		AddHudCallback(
 		    "shadow",
 		    [this]()
@@ -131,7 +137,7 @@ IPhysicsPlayerController* ShadowPosition::GetPlayerController()
 	auto player = utils::GetServerPlayer();
 	if (!player)
 		return nullptr;
-	int off = spt_entutils.GetPlayerOffset("m_oldOrigin", true);
+	int off = spt_entprops.GetPlayerOffset("m_oldOrigin", true);
 	if (off == utils::INVALID_DATAMAP_OFFSET)
 		return nullptr;
 	// this is the closest field that's in the datamap, go back 3 pointers
