@@ -123,6 +123,22 @@ namespace patterns
 	         "CC 55 8B EC 56 8B F1 8B ?? ?? ?? ?? ?? 8B 01 8B 50 ?? FF D2 84",
 			 "BMS-0.9",
 	         "CC 55 8B EC 56 8B F1 8B 0D ?? ?? ?? ?? 8B 01 8B 40 ?? FF D0 84 C0");
+	PATTERNS(
+	    DoImageSpaceMotionBlur,
+	    "5135",
+	    "A1 ?? ?? ?? ?? 81 EC 8C 00 00 00 83 78 30 00 0F 84 F3 06 00 00 8B 0D ?? ?? ?? ?? 8B 11 8B 82 80 00 00 00 FF D0",
+	    "5339",
+	    "55 8B EC A1 ?? ?? ?? ?? 83 EC 7C 83 78 30 00 0F 84 4A 08 00 00 8B 0D ?? ?? ?? ?? 8B 11 8B 82 80 00 00 00 FF D0",
+	    "4104",
+	    "A1 ?? ?? ?? ?? 81 EC 8C 00 00 00 83 78 30 00 0F 84 EE 06 00 00 8B 0D ?? ?? ?? ?? 8B 11 8B 42 7C FF D0",
+	    "2257546",
+	    "53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B 04 89 6C 24 04 8B EC A1 ?? ?? ?? ?? 81 EC 98 00 00 00 83 78 30 00",
+	    "1910503",
+	    "53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B 04 89 6C 24 04 8B EC A1 ?? ?? ?? ?? 81 EC ?? ?? ?? ?? 83 78 30 00 56 57 0F 84 ?? ?? ?? ?? 8B 0D",
+	    "missinginfo1_6",
+	    "55 8B EC A1 ?? ?? ?? ?? 81 EC ?? ?? ?? ?? 83 78 30 00 0F 84 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 8B 11",
+	    "HLS-Steampipe",
+	    "53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B ?? 89 6C 24 ?? 8B EC A1 ?? ?? ?? ?? 81 EC 98 00 00 00 83 78 ?? 00 56 57 0F 84 ?? ?? ?? ?? 8B 0D");
 
 } // namespace patterns
 
@@ -136,6 +152,7 @@ void GenericFeature::InitHooks()
 	HOOK_FUNCTION(client, ControllerMove);
 	FIND_PATTERN(client, CHudDamageIndicator__GetDamagePosition);
 	HOOK_FUNCTION(engine, SetSignonState);
+	HOOK_FUNCTION(client, DoImageSpaceMotionBlur);
 
 	if (interfaces::gm)
 	{
@@ -185,6 +202,37 @@ void GenericFeature::LoadFeature()
 			break;
 		}
 		DevMsg("[client.dll] Found MainViewOrigin at %p\n", ORIG_MainViewOrigin);
+	}
+	if (ORIG_DoImageSpaceMotionBlur)
+	{
+		int ptnNumber = GetPatternIndex((void**)&ORIG_DoImageSpaceMotionBlur);
+
+		switch (ptnNumber)
+		{
+		case 0: // 5135
+			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 132);
+			break;
+		case 1: // 5339
+			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 153);
+			break;
+		case 2: // 4104
+			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 129);
+			break;
+		case 3: // 2257546
+			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 171);
+			break;
+		case 4: // 1910503
+			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 177);
+			break;
+		case 5: // missinginfo1_6
+			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 128);
+			break;
+		case 6:
+			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 171);
+			break;
+
+		}
+		DevMsg("[client dll] pgpGlobals is %p.\n", pgpGlobals);
 	}
 }
 

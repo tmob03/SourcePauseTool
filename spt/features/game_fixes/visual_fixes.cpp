@@ -5,8 +5,8 @@
 #include "ent_utils.hpp"
 #include "signals.hpp"
 #include "dbg.h"
+#include "..\generic.hpp"
 
-typedef void(__cdecl* _DoImageSpaceMotionBlur)(void* view, int x, int y, int w, int h);
 typedef void(__fastcall* _CViewEffects__Fade)(void* thisptr, int edx, void* data);
 typedef void(__fastcall* _CViewEffects__Shake)(void* thisptr, int edx, void* data);
 typedef void(__cdecl* _ResetToneMapping)(float value);
@@ -44,8 +44,6 @@ protected:
 	virtual void UnloadFeature() override;
 
 private:
-	uintptr_t* pgpGlobals = nullptr;
-	_DoImageSpaceMotionBlur ORIG_DoImageSpaceMotionBlur = nullptr;
 	_CViewEffects__Fade ORIG_CViewEffects__Fade = nullptr;
 	_CViewEffects__Shake ORIG_CViewEffects__Shake = nullptr;
 	_ResetToneMapping ORIG_ResetToneMapping = nullptr;
@@ -53,7 +51,6 @@ private:
 
 	bool* thirdPersonFlag = nullptr;
 
-	static void __cdecl HOOKED_DoImageSpaceMotionBlur(void* view, int x, int y, int w, int h);
 	static void __fastcall HOOKED_CViewEffects__Fade(void* thisptr, int edx, void* data);
 	static void __fastcall HOOKED_CViewEffects__Shake(void* thisptr, int edx, void* data);
 	static void __cdecl HOOKED_ResetToneMapping(float value);
@@ -70,20 +67,6 @@ static VisualFixes spt_visual_fixes;
 
 namespace patterns
 {
-	PATTERNS(
-	    DoImageSpaceMotionBlur,
-	    "5135",
-	    "A1 ?? ?? ?? ?? 81 EC 8C 00 00 00 83 78 30 00 0F 84 F3 06 00 00 8B 0D ?? ?? ?? ?? 8B 11 8B 82 80 00 00 00 FF D0",
-	    "5339",
-	    "55 8B EC A1 ?? ?? ?? ?? 83 EC 7C 83 78 30 00 0F 84 4A 08 00 00 8B 0D ?? ?? ?? ?? 8B 11 8B 82 80 00 00 00 FF D0",
-	    "4104",
-	    "A1 ?? ?? ?? ?? 81 EC 8C 00 00 00 83 78 30 00 0F 84 EE 06 00 00 8B 0D ?? ?? ?? ?? 8B 11 8B 42 7C FF D0",
-	    "2257546",
-	    "53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B 04 89 6C 24 04 8B EC A1 ?? ?? ?? ?? 81 EC 98 00 00 00 83 78 30 00",
-	    "1910503",
-	    "53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B 04 89 6C 24 04 8B EC A1 ?? ?? ?? ?? 81 EC ?? ?? ?? ?? 83 78 30 00 56 57 0F 84 ?? ?? ?? ?? 8B 0D",
-	    "missinginfo1_6",
-	    "55 8B EC A1 ?? ?? ?? ?? 81 EC ?? ?? ?? ?? 83 78 30 00 0F 84 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 8B 11");
 	PATTERNS(
 	    CViewEffects__Fade,
 	    "dmomm-4104-5135",
@@ -122,7 +105,6 @@ namespace patterns
 
 void VisualFixes::InitHooks()
 {
-	HOOK_FUNCTION(client, DoImageSpaceMotionBlur);
 	HOOK_FUNCTION(client, CViewEffects__Fade);
 	HOOK_FUNCTION(client, CViewEffects__Shake);
 	HOOK_FUNCTION(client, ResetToneMapping);
@@ -139,35 +121,9 @@ bool VisualFixes::ShouldLoadFeature()
 
 void VisualFixes::LoadFeature()
 {
-	if (ORIG_DoImageSpaceMotionBlur)
-	{
-		int ptnNumber = GetPatternIndex((void**)&ORIG_DoImageSpaceMotionBlur);
-
-		switch (ptnNumber)
-		{
-		case 0: // 5135
-			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 132);
-			break;
-		case 1: // 5339
-			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 153);
-			break;
-		case 2: // 4104
-			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 129);
-			break;
-		case 3: // 2257546
-			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 171);
-			break;
-		case 4: // 1910503
-			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 177);
-			break;
-		case 5: // missinginfo1_6
-			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 128);
-			break;
-		}
-
-		DevMsg("[client dll] pgpGlobals is %p.\n", pgpGlobals);
+	
+	if (spt_generic.ORIG_DoImageSpaceMotionBlur)
 		InitConcommandBase(y_spt_motion_blur_fix);
-	}
 
 	if (ORIG_CViewEffects__Fade)
 		InitConcommandBase(y_spt_disable_fade);
@@ -192,7 +148,7 @@ void VisualFixes::LoadFeature()
 
 void VisualFixes::UnloadFeature() {}
 
-void __cdecl VisualFixes::HOOKED_DoImageSpaceMotionBlur(void* view, int x, int y, int w, int h)
+void __cdecl GenericFeature::HOOKED_DoImageSpaceMotionBlur(void* view, int x, int y, int w, int h)
 {
 	uintptr_t origgpGlobals = NULL;
 
@@ -203,22 +159,22 @@ void __cdecl VisualFixes::HOOKED_DoImageSpaceMotionBlur(void* view, int x, int y
 	so we can do such a replace to make it use gpGlobals->curtime instead without
 	breaking anything else.
 	*/
-	if (spt_visual_fixes.pgpGlobals)
+	if (spt_generic.pgpGlobals)
 	{
 		if (y_spt_motion_blur_fix.GetBool())
 		{
-			origgpGlobals = *spt_visual_fixes.pgpGlobals;
-			*spt_visual_fixes.pgpGlobals = *spt_visual_fixes.pgpGlobals + 12;
+			origgpGlobals = *spt_generic.pgpGlobals;
+			*spt_generic.pgpGlobals = *spt_generic.pgpGlobals + 12;
 		}
 	}
 
-	spt_visual_fixes.ORIG_DoImageSpaceMotionBlur(view, x, y, w, h);
+	spt_generic.ORIG_DoImageSpaceMotionBlur(view, x, y, w, h);
 
-	if (spt_visual_fixes.pgpGlobals)
+	if (spt_generic.pgpGlobals)
 	{
 		if (y_spt_motion_blur_fix.GetBool())
 		{
-			*spt_visual_fixes.pgpGlobals = origgpGlobals;
+			*spt_generic.pgpGlobals = origgpGlobals;
 		}
 	}
 }

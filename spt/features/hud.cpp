@@ -348,6 +348,7 @@ CON_COMMAND(spt_hud_group_add, "Add a HUD group. Usage: spt_hud_group_add <group
 	}
 }
 
+
 static int HudGroupRemoveCompletionFunc(AUTOCOMPLETION_FUNCTION_PARAMS)
 {
 	std::vector<std::string> suggestions;

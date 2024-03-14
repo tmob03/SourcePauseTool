@@ -16,6 +16,7 @@ typedef void(__fastcall* _CViewRender__OnRenderStart)(void* thisptr, int edx);
 typedef const Vector&(__cdecl* _MainViewOrigin)();
 typedef void*(__cdecl* _GetClientModeNormal)();
 typedef void(__fastcall* _ControllerMove)(void* thisptr, int edx, float frametime, void* cmd);
+typedef void(__cdecl* _DoImageSpaceMotionBlur)(void* view, int x, int y, int w, int h);
 
 // For hooks used by many features
 class GenericFeature : public FeatureWrapper<GenericFeature>
@@ -28,6 +29,9 @@ public:
 	_MainViewOrigin ORIG_MainViewOrigin = nullptr;
 	_GetClientModeNormal ORIG_GetClientModeNormal = nullptr;
 	_ControllerMove ORIG_ControllerMove = nullptr;
+	_DoImageSpaceMotionBlur ORIG_DoImageSpaceMotionBlur = nullptr;
+
+	uintptr_t* pgpGlobals = nullptr;
 
 	bool shouldPreventNextUnpause = false;
 	int signOnState;
@@ -53,6 +57,7 @@ private:
 	DECL_HOOK_CDECL(void, SV_Frame, bool finalTick);
 	DECL_HOOK_THISCALL(void, ProcessMovement, void*, void* pPlayer, void* pMove);
 	DECL_HOOK_THISCALL(void, SetSignonState, void*, int state);
+	static void __cdecl HOOKED_DoImageSpaceMotionBlur(void* view, int x, int y, int w, int h);
 };
 
 extern GenericFeature spt_generic;
