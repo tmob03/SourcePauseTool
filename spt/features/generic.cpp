@@ -11,6 +11,8 @@
 #include "..\cvars.hpp"
 #include "..\sptlib-wrapper.hpp"
 
+
+	uintptr_t* pgpGlobals = nullptr;
 #ifdef OE
 ConVar y_spt_gamedir(
     "y_spt_gamedir",
@@ -205,30 +207,30 @@ void GenericFeature::LoadFeature()
 	}
 	if (ORIG_DoImageSpaceMotionBlur)
 	{
-		int ptnNumber = GetPatternIndex((void**)&ORIG_DoImageSpaceMotionBlur);
+		int ptnNumber = GetPatternIndex((PVOID*)&ORIG_DoImageSpaceMotionBlur);
 
 		switch (ptnNumber)
 		{
-		case 0: // 5135
-			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 132);
+		case 0: // 5135`
+			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 133);
 			break;
 		case 1: // 5339
-			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 153);
+			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 154);
 			break;
 		case 2: // 4104
-			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 129);
+			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 130);
 			break;
-		case 3: // 2257546
-			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 171);
+		case 3: // 2257546, hls steampipe
+			if (utils::DoesGameLookLikeHLS)
+				pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 133);
+			else
+				pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 171);
 			break;
 		case 4: // 1910503
-			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 177);
+			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 178);
 			break;
 		case 5: // missinginfo1_6
-			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 128);
-			break;
-		case 6:
-			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 171);
+			pgpGlobals = *(uintptr_t**)((uintptr_t)ORIG_DoImageSpaceMotionBlur + 129);
 			break;
 
 		}

@@ -127,8 +127,8 @@ void DemoStuff::PreHook()
 		}
 		else if (index == 2) // 2229355
 		{
-			// new steampipe hl2
-			if (utils::GetBuildNumber() >= 2229355 || utils::GetBuildNumber() == 0)
+			// new steampipe hl2, 7 is hls, 0 is ???
+			if (utils::GetBuildNumber() >= 2229355 || utils::GetBuildNumber() == 0 || utils::GetBuildNumber() == 7)
 			{
 				// 2229355 offset
 				pDemoplayer = *reinterpret_cast<void***>(ORIG_Record + 0x9C);

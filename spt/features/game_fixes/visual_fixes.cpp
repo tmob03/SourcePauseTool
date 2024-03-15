@@ -159,22 +159,23 @@ void __cdecl GenericFeature::HOOKED_DoImageSpaceMotionBlur(void* view, int x, in
 	so we can do such a replace to make it use gpGlobals->curtime instead without
 	breaking anything else.
 	*/
-	if (spt_generic.pgpGlobals)
+	if (pgpGlobals)
 	{
 		if (y_spt_motion_blur_fix.GetBool())
 		{
-			origgpGlobals = *spt_generic.pgpGlobals;
-			*spt_generic.pgpGlobals = *spt_generic.pgpGlobals + 12;
+			origgpGlobals = *pgpGlobals;
+			*pgpGlobals = *pgpGlobals + 11;
+			Msg("The curtime is %f\n",(*pgpGlobals));
 		}
 	}
 
 	spt_generic.ORIG_DoImageSpaceMotionBlur(view, x, y, w, h);
 
-	if (spt_generic.pgpGlobals)
+	if (pgpGlobals)
 	{
 		if (y_spt_motion_blur_fix.GetBool())
 		{
-			*spt_generic.pgpGlobals = origgpGlobals;
+			*pgpGlobals = origgpGlobals;
 		}
 	}
 }

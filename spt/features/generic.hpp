@@ -1,13 +1,12 @@
 #pragma once
 #include "..\feature.hpp"
 #include "thirdparty\Signal.h"
-
+extern uintptr_t* pgpGlobals;
 #if defined(OE)
 #include "vector.h"
 #else
 #include "mathlib\vector.h"
 #endif
-
 typedef void(__stdcall* _HudUpdate)(bool bActive);
 typedef bool(__cdecl* _SV_ActivateServer)();
 typedef void(__fastcall* _FinishRestore)(void* thisptr, int edx);
@@ -30,8 +29,6 @@ public:
 	_GetClientModeNormal ORIG_GetClientModeNormal = nullptr;
 	_ControllerMove ORIG_ControllerMove = nullptr;
 	_DoImageSpaceMotionBlur ORIG_DoImageSpaceMotionBlur = nullptr;
-
-	uintptr_t* pgpGlobals = nullptr;
 
 	bool shouldPreventNextUnpause = false;
 	int signOnState;
